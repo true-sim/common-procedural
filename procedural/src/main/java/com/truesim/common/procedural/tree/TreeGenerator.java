@@ -131,7 +131,8 @@ public final class TreeGenerator {
             int over = mesh.triangleCount() - lod.triangleBudget();
             int attached = (mesh.submeshEnd(Tree.ATTACHMENTS) - mesh.submeshStart(Tree.ATTACHMENTS)) / 3;
             if (detail < 2) {
-                detail++;
+                // simplifying keeps about a third: when that cannot fit, merge at once (a pass saved)
+                detail = detail == 0 && mesh.triangleCount() - 0.65 * attached > lod.triangleBudget() ? 2 : detail + 1;
                 if (attached < over) {
                     keep += Math.max(1, keep / 2);
                     minRadius *= 1.4;
