@@ -133,7 +133,7 @@ final class Stage implements AutoCloseable {
      * {@code reach} metres.
      */
     int treeMaterial(int texture, boolean masked, float roughness, float reach) {
-        ProceduralTreeParameters p = ProceduralTreeParameters.DEFAULTS.withBranchSway(0.012f)
+        ProceduralTreeParameters p = ProceduralTreeParameters.DEFAULTS.withBranchSway(0.02f)
             .withBase(MetallicRoughnessParameters.DEFAULTS.withBaseColorTexture(texture).withRoughness(roughness)
                 .withMetallic(0));
         Material material = new Material(p).displacement(reach);

@@ -180,7 +180,7 @@ class ProceduralFilms {
             double[] points = new double[2 * 400];
             int count = PoissonDisc.sample(Rng.seeded(3), 110, 110, 7, 30, points);
             Rng rng = Rng.seeded(4);
-            Vec3 camera = new Vec3(0, 5, 58);
+            Vec3 camera = new Vec3(2, 4, 78);
             for (int i = 0; i < count; i++) {
                 double x = points[2 * i] - 55;
                 double z = points[2 * i + 1] - 75;
@@ -205,8 +205,8 @@ class ProceduralFilms {
                 double t = f / 30.0;
                 double speed = t < 2 ? 0 : t < 6 ? 11 * (t - 2) / 4 : 11 + 2 * Math.sin(t * 1.7);
                 stage.wind(wind(speed));
-                double z = 58 - 0.8 * t;
-                stage.look(3 * Math.sin(t * 0.25), 5 + 0.1 * t, z, 0, 10, 0, 55);
+                // A still camera at the forest's edge, so what moves is the wind
+                stage.look(camera.x(), camera.y(), camera.z(), 0, 9, 0, 50);
                 stage.frames(f == 0 ? 4 : 1, 1 / 30.0);
                 write(stage.shot(), out, f);
             }
@@ -222,13 +222,13 @@ class ProceduralFilms {
             Placed beech = load(stage, Trees.generate(TreeSpecies.BEECH, 5));
             for (int level = 0; level < 4; level++) {
                 place(stage, spruce, level, (level - 1.5) * 15, 0, 0);
-                place(stage, beech, level, (level - 1.5) * 17, -30, 0);
+                place(stage, beech, level, (level - 1.5) * 17, 24, 0); // the lower beeches in front
             }
             stage.wind(wind(3)).shade();
             int frames = 210;
             for (int f = 0; f < frames; f++) {
                 double a = 0.35 * Math.sin(2 * Math.PI * f / frames);
-                stage.look(70 * Math.sin(a), 16, 55 * Math.cos(a), 0, 11, -12, 50);
+                stage.look(75 * Math.sin(a), 14, 24 + 62 * Math.cos(a), 0, 11, 8, 50);
                 stage.frames(f == 0 ? 4 : 1, 1 / 30.0);
                 write(stage.shot(), out, f);
             }
