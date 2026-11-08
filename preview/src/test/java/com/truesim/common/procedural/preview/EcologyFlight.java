@@ -46,9 +46,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * A flight up Lauterbrunnen's western side, from the valley floor by the Weisse Luetschine over the cliffs and the
  * Muerren terrace to the Schilthorn, through the belts the ecology grows: the terrain (effects-terrain's surface from
  * its cache) coloured by the ecology's ground cover (meadow, forest floor, heath, scree, rock, snow, wetland, water),
- * and its trees and shrubs placed as common-procedural's trees (species without a generator drawn by a stand-in:
- * stone pine as pine, oak, ash and apple as beech, rowan and alder as birch, willow, green alder, elder and dog rose as
- * hazel). Dwarf shrubs, herbs and grass show only as the ground's colour (no vegetation renderer yet).
+ * and its trees and shrubs placed as common-procedural's trees, each species its own preset (by its id). Dwarf shrubs, herbs and grass show only as the ground's colour (no vegetation renderer yet).
  * {@code TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-vegetation :preview:test
  * --tests '*EcologyFlight*' -Pfilms=<dir>}; {@code TRUESIM_SCREENSHOTS=true} draws three stills on a validated
  * device.
@@ -82,17 +80,16 @@ class EcologyFlight {
         {-5560, 3980, 3150, 47},
     };
 
-    /** A stand-in preset for each species. */
-    private static final Map<String, TreeSpecies> PRESETS = Map.ofEntries(Map.entry("spruce", TreeSpecies.SPRUCE),
-        Map.entry("fir", TreeSpecies.FIR), Map.entry("larch", TreeSpecies.LARCH),
-        Map.entry("stone-pine", TreeSpecies.PINE), Map.entry("pine", TreeSpecies.PINE),
-        Map.entry("beech", TreeSpecies.BEECH), Map.entry("oak", TreeSpecies.BEECH),
-        Map.entry("birch", TreeSpecies.BIRCH), Map.entry("rowan", TreeSpecies.BIRCH),
-        Map.entry("apple", TreeSpecies.BEECH), Map.entry("ash", TreeSpecies.BEECH),
-        Map.entry("alder", TreeSpecies.BIRCH), Map.entry("willow", TreeSpecies.HAZEL),
-        Map.entry("green-alder", TreeSpecies.HAZEL), Map.entry("hazel", TreeSpecies.HAZEL),
-        Map.entry("elder", TreeSpecies.HAZEL), Map.entry("dog-rose", TreeSpecies.HAZEL),
-        Map.entry("mugo", TreeSpecies.MUGO));
+    /** The preset of each woody species: every tree and shrub the ecology names has a generator now. */
+    private static final Map<String, TreeSpecies> PRESETS = presets();
+
+    private static Map<String, TreeSpecies> presets() {
+        Map<String, TreeSpecies> map = new java.util.HashMap<>();
+        for (TreeSpecies species : TreeSpecies.PRESETS) {
+            map.put(species.name(), species);
+        }
+        return Map.copyOf(map);
+    }
 
     private TerrainSurface surface;
     private TerrainEcology ground;

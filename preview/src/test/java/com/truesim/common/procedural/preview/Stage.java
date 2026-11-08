@@ -72,19 +72,32 @@ final class Stage implements AutoCloseable {
     final Camera camera = new Camera();
     private float[] sun = normalize(-0.45f, 0.6f, -0.65f);
     private int nextId;
+    private String curve = "agx";
     private final boolean large;
+    private final int soil;
     private SceneView view;
     private Shadows shadows;
     private double time;
     private ProceduralWindParameters wind = ProceduralWindParameters.DEFAULTS;
 
     Stage(VulkanDevice device, int width, int height, double groundSize) {
-        this(device, width, height, groundSize, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64), 1 << 12);
+        this(device, width, height, groundSize, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64), 1 << 12, 150);
+    }
+
+    /** A stage whose sun casts shadows out to {@code shadowRange} metres (small plants want a short range). */
+    Stage(VulkanDevice device, int width, int height, double groundSize, double shadowRange) {
+        this(device, width, height, groundSize, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64), 1 << 12, shadowRange);
     }
 
     /** A stage with room for {@code capacity} in its geometry pool and {@code instances} instances to start with. */
     Stage(VulkanDevice device, int width, int height, double groundSize, GeometryPool.Capacity capacity,
         int instances) {
+        this(device, width, height, groundSize, capacity, instances, 150);
+    }
+
+    /** A stage with room for {@code capacity}, {@code instances} and sun shadows out to {@code shadowRange}. */
+    Stage(VulkanDevice device, int width, int height, double groundSize, GeometryPool.Capacity capacity,
+        int instances, double shadowRange) {
         this.device = device;
         this.width = width;
         this.height = height;
@@ -104,12 +117,14 @@ final class Stage implements AutoCloseable {
         scene.setMaterials(materials);
         if (groundSize > 0) {
             int ground = pool.add(ground(groundSize, 64));
-            int soil = materials.add(new Material(MetallicRoughnessParameters.DEFAULTS
+            soil = materials.add(new Material(MetallicRoughnessParameters.DEFAULTS
                 .withBaseColor(new Color(0.06f, 0.08f, 0.03f, 1)).withRoughness(0.95f).withMetallic(0)));
             scene.set(nextId++, ground, soil, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        } else {
+            soil = -1;
         }
         lights.directional(0, -sun[0], -sun[1], -sun[2], 4.2f, 3.9f, 3.4f);
-        lights.shadow(0, ShadowSpec.cascades(4, 2048, 150));
+        lights.shadow(0, ShadowSpec.cascades(4, 2048, (float) shadowRange));
         lights.setCount(1);
     }
 
@@ -193,6 +208,34 @@ final class Stage implements AutoCloseable {
         return materials.add(material);
     }
 
+    /**
+     * A palette material for flowers, fruits and small plants: colored by the palette texture, two-sided (petals and
+     * leaves are single sheets), swaying within {@code reach} metres.
+     */
+    int paletteMaterial(int texture, float roughness, float reach, float branchSway) {
+        return paletteMaterial(texture, roughness, reach, branchSway, ProceduralTreeParameters.DEFAULTS.leafFlutter());
+    }
+
+    /** A palette material whose leaves flutter {@code flutter} metres per m/s (small plants' blades: little). */
+    int paletteMaterial(int texture, float roughness, float reach, float branchSway, float flutter) {
+        ProceduralTreeParameters p = ProceduralTreeParameters.DEFAULTS.withBranchSway(branchSway).withLeafFlutter(flutter)
+            .withBase(MetallicRoughnessParameters.DEFAULTS.withBaseColorTexture(texture).withRoughness(roughness)
+                .withMetallic(0));
+        return materials.add(new Material(p).displacement(reach).doubleSided(true));
+    }
+
+    /** The ground's color (linear): soil, or snow. */
+    void ground(float r, float g, float b) {
+        materials.set(soil, new Material(MetallicRoughnessParameters.DEFAULTS.withBaseColor(new Color(r, g, b, 1))
+            .withRoughness(0.95f).withMetallic(0)));
+    }
+
+    /** Removes {@code mesh} from the pool once the GPU is done with it. */
+    void remove(int mesh) {
+        device.waitIdle();
+        pool.remove(mesh);
+    }
+
     /** A plain material, no wind: rocks. */
     int plainMaterial(int texture, float roughness) {
         return materials.add(new Material(MetallicRoughnessParameters.DEFAULTS.withBaseColorTexture(texture)
@@ -221,12 +264,29 @@ final class Stage implements AutoCloseable {
         view = geometry.createView(port, camera, large ? ViewOptions.of(1 << 22, 1 << 24).withBins(1 << 21, 1 << 23) : ViewOptions.of(1 << 21, 1 << 22));
         view.set(1, MeshletRenderer.MODE_LIT);
         shadows = new Shadows(geometry, lights);
-        graph.settings().set(DisplayTransform.CURVE, "agx");
+        graph.settings().set(DisplayTransform.CURVE, curve);
         port.add(new VisibilityBufferShading(geometry, view, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_D32_SFLOAT))
             .add(new EnvironmentLighting(environment, view)).add(new SkyBackground(environment, view))
             .add(new ClusteredLights(lights, view)).add(shadows.view(view))
             .add(new DisplayTransform().transform(Keys.SCENE_COLOR, SHOWN, DisplayEncoding.SDR_SRGB))
             .output(SHOWN, target.output());
+        return this;
+    }
+
+    /**
+     * The sun behind the camera's usual side (+z) instead of facing it: front light, as a photograph of a tree in
+     * flower or fruit is taken. Before {@link #shade}.
+     */
+    Stage frontLit() {
+        sun = normalize(-0.45f, 0.6f, 0.65f);
+        lights.directional(0, -sun[0], -sun[1], -sun[2], 4.2f, 3.9f, 3.4f);
+        return this;
+    }
+
+    /** The display's tone curve from now on: agx (the default), pbr_neutral, aces, ... */
+    Stage curve(String name) {
+        curve = name;
+        graph.settings().set(DisplayTransform.CURVE, name);
         return this;
     }
 

@@ -7,10 +7,10 @@ description = "Pictures and films of common-procedural's assets through the engi
     "swaying by the wind format. Not published: the generators never depend on the engine."
 
 dependencies {
-    implementation("com.truesim.engine:engine-render:0.195.0") // material types and geometry hooks
+    implementation("com.truesim.engine:engine-render:0.197.0") // material types and geometry hooks
     implementation(project(":common-procedural"))
     implementation(project(":common-procedural-assets"))
-    testImplementation(testFixtures("com.truesim.engine:engine-render:0.195.0")) // the headless renderer
+    testImplementation(testFixtures("com.truesim.engine:engine-render:0.197.0")) // the headless renderer
     testImplementation("com.truesim.scene:scene-meshbuild:0.70.0")
     testImplementation(project(":common-procedural-ecology-terrain")) // the ecology over Lauterbrunnen's terrain
 }

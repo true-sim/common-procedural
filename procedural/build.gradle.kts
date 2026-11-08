@@ -11,6 +11,7 @@ dependencies {
 
 // The benchmark (TRUESIM_BENCHMARK=true) measures the code, not its coverage probes; a generator per core needs room.
 tasks.test {
+    maxHeapSize = "2g" // flowering crowns of tens of thousands of flowers, a few trees at once
     if (providers.environmentVariable("TRUESIM_BENCHMARK").orNull == "true") {
         maxHeapSize = "6g"
         extensions.configure<JacocoTaskExtension> { isEnabled = false }

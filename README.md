@@ -1,16 +1,17 @@
 # common-procedural
 
-Procedural assets for true-sim, generated deterministically from parameters and a seed: trees first, rocks, and more
-to come ([roadmap](#roadmap)), and the [ecology](#ecology-which-plants-grow-where) that decides which plants grow where.
+Procedural assets for true-sim, generated deterministically from parameters and a seed: trees and shrubs with their
+flowers, fruits and cones through the year, meadow flowers, grass and wetland clumps, rocks, and more to come
+([roadmap](#roadmap)), and the [ecology](#ecology-which-plants-grow-where) that decides which plants grow where.
 The generators are engine-agnostic (common-math only); a second module brings them into the scene's asset system as
 recipe files.
 
 | Module | Package | Contents |
 |---|---|---|
-| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, rocks, their meshes |
+| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks, their meshes |
 | `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances |
 | `common-procedural-ecology-terrain` | `com.truesim.common.procedural.ecology.terrain` | the ecology over effects-terrain's surface and layers (optional) |
-| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, rocks, ecologies) imported as scene meshes, models and recipes, generated in the background, cached |
+| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, plants, rocks, ecologies) imported as scene meshes, models, textures and recipes, generated in the background, cached |
 | `preview` (not published) | | pictures and films through the engine, with a minimal tree material reading the wind format |
 
 ```kotlin
@@ -46,12 +47,16 @@ for (int i = 0; i < 1000; i++) forest.add(generator.generate(species(i), Seeds.d
 ```
 # game://forest/spruce-a.tree
 generator = tree
-preset = spruce               # a TreeSpecies preset: spruce fir larch pine beech birch hazel mugo
+preset = spruce               # a TreeSpecies preset: spruce fir larch pine beech birch rowan apple hazel mugo
+                              # elder dog-rose alpenrose blueberry lingonberry stone-pine oak ash
+                              # alder green-alder willow
 seed = 42
 season = summer               # spring summer autumn winter
+day = 200                     # or a day of the year (0 to 365): flowers and fruits
 snow = 0.3                    # 0 to 1
 material.bark = game://materials/spruce-bark.material
 material.leaves = game://materials/spruce-needles.material
+material.attachments = game://materials/cones.material   # base color: game://forest/spruce-a.tree#palette
 ```
 
 ```java
@@ -63,14 +68,17 @@ AssetRef<ModelData> spruce = paths.ref(RenderAssets.MODEL, "game://forest/spruce
 AssetRef<MeshData> far = paths.ref(RenderAssets.MESH, "game://forest/spruce-a.tree#lod/2");
 AssetRef<MeshData> card = paths.ref(RenderAssets.MESH, "game://forest/spruce-a.tree#billboard");
 AssetRef<MeshData> stone = paths.ref(RenderAssets.MESH, "game://rocks/block.rock#lod/1");
-AssetRef<ModelData> inCode = procedural.model(new Recipe("tree", "larch", 7, Season.AUTUMN, 0, List.of("", "")));
+AssetRef<ModelData> inCode = procedural.model(new Recipe("tree", "larch", 7, Season.AUTUMN, 0, List.of("", "", "")));
+AssetRef<TextureData> colors = paths.ref(RenderAssets.TEXTURE, "game://forest/rowan.tree#palette");
+AssetRef<MeshData> gentian = paths.ref(RenderAssets.MESH, "game://meadow/gentian-a.plant#lod/1");
 ```
 
 - **In the background:** importers run on the asset cache's lane (the job system); loads finish at the frame
   boundary like every asset. A recipe imports as a `MODEL` (one node: level 0 with its materials, or none if a slot
-  has none), a `MESH` (fragments `#lod/N` and `#billboard`), and a `RECIPE`.
+  has none), a `MESH` (fragments `#lod/N` and `#billboard`), a `TEXTURE` (`#palette`, trees and plants) and a
+  `RECIPE`.
 - **Generated once:** `GenerationCache` keeps generated meshes on disk keyed by SHA-256 of the generator's id and
-  version and the recipe's generation key (generator, preset, seed, season, snow; not the materials). A recipe or a
+  version and the recipe's generation key (generator, preset, seed, season, snow, day; not the materials). A recipe or a
   generator version that changes makes a new key: regeneration happens only on change, across runs; files are written
   whole and moved into place, so concurrent loads are safe.
 - **Streaming:** the meshes are ordinary assets: cells acquire and release them, the cache evicts them under its budget
@@ -86,7 +94,8 @@ AssetRef<ModelData> inCode = procedural.model(new Recipe("tree", "larch", 7, Sea
 
 ## Trees
 
-Eight presets, tuned by eye to their species' habit, for the Alpine showcase first:
+Twenty-one presets (their names the ecology's species ids), tuned by eye to their species' habit, for the Alpine showcase first (the flowering and fruiting
+ones are in [Flowers, fruits and cones](#flowers-fruits-and-cones)):
 
 | Preset | Species | Growth | Foliage |
 |---|---|---|---|
@@ -98,6 +107,19 @@ Eight presets, tuned by eye to their species' habit, for the Alpine showcase fir
 | `BIRCH` | silver birch (*Betula pendula*) | space colonization in an egg, drooping | leaf clusters |
 | `HAZEL` | hazel (*Corylus avellana*), shrub | space colonization over six stems | leaf clusters |
 | `MUGO` | mountain pine (*Pinus mugo*), shrub | parametric over seven creeping, rising stems | needle tufts |
+| `ROWAN` | rowan (*Sorbus aucuparia*) | space colonization in an egg | leaf clusters |
+| `APPLE` | apple (*Malus domestica*) | space colonization in an ellipsoid | leaf clusters |
+| `ELDER` | elder (*Sambucus nigra*), shrub | space colonization over four stems | leaf clusters |
+| `DOG_ROSE` | dog rose (*Rosa canina*), shrub | space colonization over six arching stems | leaf clusters |
+| `ALPENROSE` | alpenrose (*Rhododendron ferrugineum*), dwarf shrub | space colonization over eight stems | evergreen leaf clusters |
+| `BLUEBERRY` | bilberry (*Vaccinium myrtillus*), dwarf shrub | space colonization over eight stems | leaf clusters |
+| `LINGONBERRY` | lingonberry (*Vaccinium vitis-idaea*), dwarf shrub | space colonization over ten stems | evergreen leaf clusters |
+| `STONE_PINE` | stone pine (*Pinus cembra*) | parametric: a dense column down to the ground | needle tufts |
+| `OAK` | pedunculate oak (*Quercus robur*) | space colonization in a broad ellipsoid | leaf clusters |
+| `ASH` | ash (*Fraxinus excelsior*) | space colonization in an egg | leaf clusters |
+| `ALDER` | black alder (*Alnus glutinosa*), stream banks | space colonization in a narrow egg | leaf clusters |
+| `GREEN_ALDER` | green alder (*Alnus alnobetula*), shrub | space colonization over seven springy stems | leaf clusters |
+| `WILLOW` | riverbank willow (*Salix eleagnos*, *S. purpurea*), shrub | space colonization over eight wands | narrow leaf clusters |
 
 ### How a tree is made
 
@@ -145,6 +167,143 @@ Eight presets, tuned by eye to their species' habit, for the Alpine showcase fir
 
 All of it is deterministic: the same species, options and seed give bit-identical meshes on every platform (seeds are
 split per stage with `Seeds.derive`; math is common-math's `Maths`, never `java.lang.Math`'s inexact functions).
+
+## Flowers, fruits and cones
+
+Trees and shrubs bear what their species' `Fruiting` says (`TreeSpecies.fruiting()`, `null` for nothing): flowers
+that open and fade, fruits that grow, ripen and fall, cones, nuts. They are a third submesh (`Tree.ATTACHMENTS`),
+colored from the species' palette (`Tree.palette()`), on the tree's day of the year:
+
+```java
+Tree rowan = Trees.generate(TreeSpecies.ROWAN, TreeOptions.DEFAULTS.withDay(160), 3);   // creamy corymbs, 9 June
+Tree laden = Trees.generate(TreeSpecies.ROWAN, TreeOptions.DEFAULTS.withDay(250), 3);   // scarlet bunches, September
+Tree spring = Trees.generate(TreeSpecies.APPLE, TreeOptions.DEFAULTS.withSeason(Season.SPRING), 3); // day 135
+FloraSummary shown = laden.flora();          // buds, flowers, fruits, their mean albedo and area
+byte[] palette = laden.palette().texels();   // the attachments' base color texture, 16 x 36 sRGB
+```
+
+- **Where** (`Fruiting.Placement`): at twig tips (roses, alpenrose's trusses, spruce cones), or along the outer part
+  of shoots, off to their sides (apple spurs, rowan's and elder's heads on their short side shoots, blueberry
+  flowers, larch cones), with a density (a chance per tip, a number per metre), from a branch level, above a height
+  (spruce and fir cone high in the crown). Sites keep to the crown's outer shell (from 0.6 of the way out from its
+  centre to its envelope): fruit and flowers are borne on the sunlit outer shoots, and heads turn out of the crown,
+  so from a distance they show as on real trees rather than hiding behind the leaves. Densities are set so a tree
+  shows about as much as a real one: a rowan in fruit about a thousand bunches of 40 to 80 berries, an apple tree about a
+  thousand apples, a dog rose several hundred flowers. Sites are
+  drawn from the seed, the same on every day, so a flower is the same flower from bud to fruit.
+- **How** (`Inflorescence`): solitary, a cluster on equal stalks (apple, alpenrose), an umbel to a dome (elder), a
+  corymb to a flat top, branching partway out (rowan), a raceme along an axis (lingonberry); compound heads carry
+  florets packed around each stalk's end (rowan ten, elder eighteen), so a head shows 120 to 290 flowers. Each flower has its
+  stalk (pedicel), the head its common stalk (peduncle); heads are held up (`erect`), bells nod (`nodding`), heads
+  heavy with fruit sink (`fruitDroop`) and a ripe fruit hangs from its stalk (`FruitShape.hang`).
+- **When** (`Phenology`, days of the year for the montane belt of the Alps): each flower has its own dates, drawn from
+  its head's time (a tree's heads open over the middle half of the species' window) and its own (a head's flowers
+  within a few days): a closed bud growing for `budDays`, opening over a
+  day and a half, aging (its petals' color ramp: rowan's cream to brown, apple's pink buds to white) for
+  `flowerDays`; then, for the `fruitSet` share, a fruit growing to full size by `ripenStart`, ripening green to the
+  species' color over `ripenDays` from its own day, falling on its own day in the drop window, which may reach past
+  the year's end (rose hips, rowan berries, lingonberries hang into the winter; spruce and larch cones longer). A
+  season stands for a day (`Season.day()`: 135, 196, 270, 15), `withDay` sets the day and its season (the leaves'
+  tile: summer until the equinox, so berries ripen among green leaves). Deciduous leaves unfold through spring (a
+  third of their size in April, half at apple blossom, full by mid June).
+- **Shapes** (`FloraWriter`): flowers of free petals (count, length, width, outline: round, pointed, notched,
+  toothed; cupping; curling closed as buds), fused bells and trumpets ending in lobes (gentian, blueberry's urn,
+  lingonberry's bell, alpenrose's funnel), composite heads of rays around a domed disc (arnica, aster), globes of
+  florets (clover), stars of bracts around small heads (edelweiss); sepals below, a centre of stamens. Fruits are
+  closed spheroids along their axis: berries and hips (a calyx crown at the apex), apples (drawn in at both ends),
+  cones (a spiral of scales in the outline, pointed at the apex), grass spikes; sizes vary per fruit. Petals and
+  sepals are cupped, curving strips for two-sided materials.
+- **Colors** (`Palette`): the vertex color carries the wind, so these parts take their color from texture
+  coordinates: v picks a part's row (petal, centre, sepal, stalk, fruit, a second fruit color for another cultivar,
+  leaf, blade, cone), u its place along the part's ramp (a petal's age, a fruit's ripeness, a cone's maturity, a
+  leaf's senescence), three albedos per ramp. `Palette.texels()` is the texture: 16 texels across, 4 per row, so
+  linear filtering reproduces the ramp and the top mips keep rows apart. Albedos are linear sRGB, set from typical
+  published reflectance: white petals about 0.6 to 0.8 across the visible, colored ones little outside their hue (the
+  Floral Reflectance Database, Arnold et al. 2010; Chittka et al. 1994), ripe red fruits about 0.4 to 0.5 in the
+  red and under 0.06 elsewhere, black ones under 0.05, blue-black with a waxy bloom about 0.1 in the blue (Schaefer
+  et al., Behav. Ecol. 2006), leaves 0.05 to 0.12 (Jacquemoud and Baret 1990), nothing above fresh snow's 0.9
+  (Warren 1982): approximations for rendering, kept physical so global illumination and snow cover respond as they
+  should (tested: every preset's every ramp within 0.02 and 0.85).
+- **Wind**: every vertex of a head takes the wind of the node it grows from (its trunk and branch weights, phase,
+  pivot and reach), so it sways with its branch, rigidly; petals and sepals flutter by the leaf weight toward their
+  tips (up to 0.6), fruits, cones and stalks not at all (a closed surface fluttering along its normals would breathe).
+- **Weight and snow**: a crop bows the boughs as snow does (`weightDroop` times the crop's mass on the day: apples in
+  September); attachments are placed after snow and crop have sunk the branches, so they stay on them. Snow on them
+  is the material's (the engine's snow cover reads their physical albedo and normals).
+- **Levels of detail** (`TreeLod.attachmentDetail`): 0 full (petals in segments, sepals, pedicels), 1 simplified
+  (fewer segments and sides, no sepals or pedicels; a compound head's florets merged per stalk into a small dome or
+  bunch), 2 merged (a head of many as one shape: a flattened dome of blossom, a hanging blob of berries, in their mean
+  color), 3 none. Tiny flowers (under 8 mm across) are drawn simply at every level. Every level stays within its
+  triangle budget, flowers and fruits included: over it, the level simplifies and merges them first, then thins leaf
+  cards and twigs; only when even that leaves no room are they dropped (and the thinning starts over). Its error
+  counts what was merged or dropped. Merged heads are lumpy domes and bunches (their florets and berries read in
+  the outline) in the head's mean color, so far levels keep a tree's blossom or crop.
+- **Seen from afar** (tested): drawn from 40 m, a rowan in fruit shows red over at least 8 % of its crown's pixels
+  (more than 10 % of them its attachments), in flower 8 %, an apple tree in fruit red over 3.5 % and in blossom 5 %, a
+  dog rose in flower 4 %, in hips 2 %; before the outer shell and these densities, a rowan showed 4.5 % and a dog rose
+  0.5 %. With the default near budget (90,000) a flowering rowan's or elder's near level
+  draws merged florets; the films' close-ups raise it to 400,000 to show every flower.
+- **Far away**: the billboard's capture and an impostor bake draw the most detailed level, attachments included;
+  `ImpostorHints.bloom()` and `bloomCoverage()` give the attachments' mean albedo and the share of the side view they
+  cover, for a far representation captured on another day (or none) to tint by.
+
+| Preset | Species | Bears |
+|---|---|---|
+| `ROWAN` | rowan (*Sorbus aucuparia*), small tree | corymbs of creamy flowers in June; scarlet berries from August, into the winter |
+| `APPLE` | apple (*Malus domestica*), orchard tree | pink buds, white blossom on spurs in May; red or green apples (by seed) in September |
+| `ELDER` | elder (*Sambucus nigra*), shrub | flat heads of tiny cream flowers in June; black berries on purple-red stalks in August |
+| `DOG_ROSE` | dog rose (*Rosa canina*), shrub | pale pink flowers in June; scarlet hips through the winter |
+| `ALPENROSE` | alpenrose (*Rhododendron ferrugineum*), dwarf shrub | trusses of pink-red funnels in July; brown capsules |
+| `BLUEBERRY` | bilberry (*Vaccinium myrtillus*), dwarf shrub | nodding urns in May; blue-black berries with a bloom in July |
+| `LINGONBERRY` | lingonberry (*Vaccinium vitis-idaea*), dwarf shrub | racemes of white-pink bells in June; red berries to spring |
+| `SPRUCE`, `FIR`, `LARCH`, `PINE`, `MUGO` | the conifers | cones: red in May (larch's pink in April), brown in autumn; spruce's hang, fir's and larch's stand |
+| `HAZEL` | hazel | nuts in clusters of one to four, ripe in September |
+| `STONE_PINE` | stone pine | upright violet cones high in the crown, brown in autumn |
+| `OAK`, `ASH` | oak, ash | acorns on long stalks; bunches of winged seeds hanging into the winter |
+| `ALDER`, `GREEN_ALDER` | the alders | small woody cones in clusters, black through the winter |
+| `WILLOW` | willow | silvery-yellow catkins in April, white wool in June |
+
+## Plants: meadow flowers and grass
+
+`Plants.generate(PlantSpecies, PlantOptions, seed)` (or a `PlantGenerator` per thread): a rosette of basal leaves (or
+a grass's blades) from the foot, flowering stems leaning out and nodding over, with their leaves (opposite pairs or
+alternate) and side branches, and a flower or a seed head on each, as the day says; leaves simple, trifoliate
+(clover) or palmately lobed (buttercup) on stalks, grown in spring, withering in autumn, dead through the winter;
+snow presses them down. Submesh 0 is the foliage, 1 the flowers, both colored from `Plant.palette()`. Three levels
+(full, simplified with half the leaves, minimal with a quarter; budgets 6,000, 1,500 and 500 triangles) and a
+billboard. **Wind** in the trees' format without a trunk: everything sways about the foot (pivot height 0, reach the
+plant's height) by `(s / height)^1.5` of its path from the foot, leaves and petals flutter toward their tips, each stem
+and leaf with a phase of its own: effects-vegetation's plant material sways them as it does trees.
+
+| Preset | Species | Flowers |
+|---|---|---|
+| `GENTIAN` | trumpet gentian (*Gentiana acaulis*) | one deep blue trumpet on a rosette, May and June |
+| `ARNICA` | arnica (*Arnica montana*) | orange-yellow heads of toothed rays, July |
+| `ALPINE_ASTER` | alpine aster (*Aster alpinus*) | violet rays around a yellow disc, July and August |
+| `EDELWEISS` | edelweiss (*Leontopodium nivale* subsp. *alpinum*) | a star of white felted bracts, July to September |
+| `BUTTERCUP` | meadow buttercup (*Ranunculus acris*) | glossy yellow cups on branched stems, May to July |
+| `CLOVER` | red clover (*Trifolium pratense*) | round pink-purple heads, June to September |
+| `GRASS` | a meadow grass clump (after *Festuca*, *Poa*) | spike-like panicles in June, straw in August; blades straw from October |
+| `SEDGE` | common sedge (*Carex nigra*), wet ground | dark spikes on three-edged culms, May to July |
+| `COTTON_GRASS` | cotton grass (*Eriophorum angustifolium*), bogs | nodding heads turning to white cotton in June and July |
+| `RUSH` | soft rush (*Juncus effusus*), wet ground | brown clusters from the side of its stems, summer |
+| `MARSH_MARIGOLD` | marsh marigold (*Caltha palustris*), springs and streams | golden cups, April to June |
+
+Not yet generated, of the ecology's species: moss and lichen (ground covers rather than plants: a texture or decal
+layer, to come with #5), ferns and heather (#2).
+
+Through the asset manager a plant is a `.plant` recipe (slots `foliage` and `flowers`), and any tree or plant recipe's
+`#palette` is its palette as a texture, for the attachments', foliage's and flowers' materials:
+
+```
+# game://meadow/gentian-a.plant
+generator = plant
+preset = gentian
+seed = 8
+day = 150                     # or season = spring
+material.foliage = game://materials/plant.material      # base color: game://meadow/gentian-a.plant#palette
+material.flowers = game://materials/flowers.material
+```
 
 ## The vertex format and the wind data
 
@@ -396,7 +555,7 @@ Two films (1280 x 720, 30 frames a second) of Lauterbrunnen, made from effects-t
   moisture, rivers with riparian ground and wetlands, ground cover, the dominant canopy, the valley floor closer
   (hydrology, ground cover, canopy along the Weisse Luetschine), then every species' abundance.
 - **A flight up the valley side** (`EcologyFlight` in `preview`, `TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true
-  -Ptruesim.engine=../engine-vegetation :preview:test --tests '*EcologyFlight*'`): from the floor by the river over the
+  -Ptruesim.engine=false :preview:test --tests '*EcologyFlight*'`): from the floor by the river over the
   cliffs and the Muerren terrace to the Schilthorn, turning east to the Jungfrau: the terrain coloured by the ecology's
   ground cover, 364,000 trees and shrubs placed by it within a kilometre of the path, drawn by common-procedural's trees
   as stand-ins (no vegetation renderer yet: stone pine as pine, oak, ash and apple as beech, rowan and alder as birch,
@@ -439,10 +598,27 @@ show bare rock, and nothing grows below the trees but the colour.
 - **Bark UVs and frames:** v below 4.1 everywhere (float16 precision), unit normals, tangents across them.
 - **Impostor hints:** the sphere holds the tree; all view directions unit, above the horizon; cameras at twice the
   radius.
-- **Assets:** see above.
+- **Flowers, fruits and cones** (`AttachmentTest`, `FloraTest`): bit-identical per seed and day for every bearing
+  preset (after another tree and day, on another thread); sites where their rules put them (tip sites at the twig's
+  last node, along-shoot sites in its outer part, above their height, levels from their own, tip counts about the
+  density); heads with their flower counts, every vertex within its head's reach of a site; the dates (a flower's
+  bud, flower, fruit, ripening and drop days, last year's fruit in January; rowan bare in April, in flower in June,
+  scarlet and ripe in September, fewer in January, none in March; apple's pink buds, then blossom, a fifth of the
+  flowers as apples, none in November, boughs bowed by the crop, both cultivars' colors; lingonberries and hips under
+  winter snow, elder bare; spruce's red young cones in spring, brown in autumn); every attachment vertex carrying its
+  node's trunk weight, branch weight, phase, pivot and reach, fruits and stalks without flutter; every level within
+  its budget at bloom and in fruit, no more attachment triangles than the level before, a tight budget met by
+  simplifying them; fruits closed at every detail; flowers opening wider than their buds; the palette's texels and
+  coordinates; every preset's albedos physical.
+- **Plants** (`PlantTest`): bit-identical per seed and day; more than half of 24 plants in flower on their peak day,
+  none in winter; foliage in its leaf or blade ramp; withering in autumn, pressed down by snow, grass spikes green in
+  June and straw in August; no trunk weight, the pivot at the foot, the highest point swinging well; budgets.
+- **Assets:** see above; a fruiting `.tree` with a `day` and a `.plant` load meshes byte-identical to the direct API's
+  (levels and billboard), `#palette` the species' palette texels.
 
 `TRUESIM_PICTURES=true ./gradlew :common-procedural:test --tests '*ProbeTest'` draws every species and rock at every
-level on the CPU into `procedural/build/probe`, without a GPU.
+level on the CPU into `procedural/build/probe`, without a GPU (and, `flora` and `plants`, every bearing species in
+flower and in fruit with close-ups of a head at every level, every plant through the year).
 
 ## Benchmark
 
@@ -450,22 +626,49 @@ level on the CPU into `procedural/build/probe`, without a GPU.
 1,000 distinct trees, an Alpine mix (spruce 40 %, larch 25 %, fir 15 %, pine 10 %, beech and birch 5 % each), each
 with three levels, a billboard and impostor hints.
 
-Measured on a 32-thread desktop CPU (JDK 27), after a warm-up:
+Measured on a 32-thread desktop CPU (JDK 27), after a warm-up, on the summer day (conifers with their cones):
 
 | Species | per tree, one thread | LOD 0 triangles |
 |---|---|---|
-| spruce | 40.5 ms | 67,044 |
-| fir | 36.0 ms | 67,295 |
-| larch | 13.4 ms | 70,574 |
-| pine | 54.6 ms | 74,059 |
-| beech | 26.7 ms | 27,682 |
-| birch | 11.8 ms | 14,302 |
-| hazel | 5.8 ms | 7,834 |
-| mugo | 3.3 ms | 22,482 |
+| spruce | 44.3 ms | 67,341 |
+| fir | 38.3 ms | 68,161 |
+| larch | 18.1 ms | 73,699 |
+| pine | 58.5 ms | 74,746 |
+| stone-pine | 38.5 ms | 75,343 |
+| beech | 27.2 ms | 27,682 |
+| oak | 43.6 ms | 41,488 |
+| ash | 44.2 ms | 30,257 |
+| birch | 19.3 ms | 14,302 |
+| alder | 22.1 ms | 29,354 |
+| hazel | 6.6 ms | 10,330 |
+| mugo | 3.7 ms | 24,432 |
+| green-alder | 7.0 ms | 16,602 |
+| willow | 3.8 ms | 6,178 |
 
-**A forest of 1,000 trees: 25.3 s on one thread, 2.6 s on 32 threads** (a generator per thread), 64.6 million LOD 0
-triangles in all. Through the asset path a tree is generated once per recipe and generator version, then read from the
-generation cache.
+**A forest of 1,000 trees: 27.9 s on one thread, 2.8 s on 32 threads** (a generator per thread), 65.4 million LOD 0
+triangles in all (25.3 s and 2.6 s before cones). Through the asset path a tree is generated once per recipe and
+generator version, then read from the generation cache.
+
+Flowering and fruiting species on their peak bloom and ripe days (`ForestBenchmark.flora`; all levels, billboard,
+impostor hints). A rowan or elder carries about a thousand heads of a hundred or more flowers: every flower's state
+is evaluated and every head meshed (merged) for each level, which makes them the slowest trees to generate:
+
+| Species | in flower | in fruit | LOD 0 triangles (flower / fruit) |
+|---|---|---|---|
+| rowan | 333.8 ms | 256.4 ms | 42,127 / 40,416 |
+| apple | 176.9 ms | 68.4 ms | 59,405 / 60,764 |
+| elder | 198.5 ms | 104.7 ms | 22,168 / 35,087 |
+| oak | 30.3 ms | 28.8 ms | 36,908 / 43,190 |
+| ash | 20.1 ms | 20.3 ms | 28,811 / 33,636 |
+| dog-rose | 21.0 ms | 8.7 ms | 43,512 / 33,518 |
+| alpenrose | 7.5 ms | 2.3 ms | 17,405 / 4,993 |
+| blueberry | 4.5 ms | 1.9 ms | 7,400 / 4,829 |
+| lingonberry | 2.2 ms | 1.6 ms | 10,330 / 5,269 |
+
+Plants, per clump on one thread: gentian 0.22 ms (267 triangles), arnica 0.34 ms (559), alpine aster 0.12 ms (709),
+edelweiss 0.11 ms (453), buttercup 0.14 ms (649), clover 0.14 ms (631), grass 0.51 ms (1,210), sedge 0.19 ms
+(1,132), cotton grass 0.13 ms (707), rush 0.20 ms (1,249), marsh marigold 0.18 ms (616). **A meadow of 10,000
+clumps: 0.10 s on 32 threads** (5.9 million LOD 0 triangles).
 
 ## Preview: pictures and films through the engine
 
@@ -473,16 +676,25 @@ The `preview` module renders generated assets with the engine's renderer (a test
 library never depends on the engine. Its minimal tree material (`proceduralTree.slang`) shades as metallic-roughness
 and sways by the wind format in `displace()` (the engine's per-material displacement), driven by its geometry hook
 `procedural.wind`. Leaf atlases, bark and the billboard capture are drawn on the CPU (`Looks`) until procedural textures
-(#5) exist. Until the engine releases per-material displacement, build it against that branch:
+(#5) exist. It builds against the released engine (0.197.0, with per-material displacement):
 
 ```bash
-TRUESIM_SCREENSHOTS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-vegetation :preview:test   # stills
-TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-vegetation :preview:test        # films
+TRUESIM_SCREENSHOTS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :preview:test   # stills
+TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :preview:test        # films
+TRUESIM_FLORA_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :preview:test  # flora
 ```
 
 Films (1280 x 720, 30 frames a second): a turntable of every species, a small forest in rising wind, the levels of
 detail side by side (spruce and beech: levels 0-2 and the billboard), the seasons (larch through the year, a spruce
-under snow), and the ecology's flight up Lauterbrunnen's side (see [Ecology](#pictures-and-films)).
+under snow), and the ecology's flight up Lauterbrunnen's side (see [Ecology](#pictures-and-films)). Flora films
+(`FloraFilms`): a turntable of every flowering species, in flower and in fruit (plants: in flower and late in the
+year) side by side; a rowan and an apple tree through the year, from April to the next March in steps of four days
+(snow on the ground and the boughs in winter); a patch of meadow flowers and grass clumps in rising wind. Attachments
+and plants use a two-sided palette material (`Stage.paletteMaterial`) reading the palette texture, swaying by the
+same wind format (blades fluttering a millimetre, not the leaf cards' centimetres). The flora films tone map with
+Khronos PBR Neutral, which keeps an albedo's hue and saturation (`FloraFilms.colourChart` draws the flora's albedos
+through AgX and PBR Neutral: AgX at the stage's exposure washes rowan red to salmon and arnica to beige). A group of
+rowans, apple trees and dog roses from 50 m (`groupFromFiftyMetres`), in flower and in fruit.
 
 ## Roadmap
 
@@ -490,7 +702,8 @@ Trees and rocks are in. Next, each an issue:
 
 - [#1](https://github.com/true-sim/common-procedural/issues/1) Rocks: erosion-like detail beyond noise, clusters and
   scree fields
-- [#2](https://github.com/true-sim/common-procedural/issues/2) Plants, flowers and grass clumps
+- [#2](https://github.com/true-sim/common-procedural/issues/2) Plants, flowers and grass clumps: meadow flowers,
+  grass clumps and dwarf shrubs are in; ferns, sedges and heather cushions to come
 - [#3](https://github.com/true-sim/common-procedural/issues/3) Alpine buildings: chalets with roofs and balconies
 - [#4](https://github.com/true-sim/common-procedural/issues/4) Fences and paths
 - [#5](https://github.com/true-sim/common-procedural/issues/5) Procedural textures: bark, rock and tileable materials

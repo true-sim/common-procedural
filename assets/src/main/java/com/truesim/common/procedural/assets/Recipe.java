@@ -16,30 +16,52 @@ import java.util.Locale;
  * generator = tree
  * preset = spruce
  * seed = 42
- * season = summer          # spring, summer, autumn, winter (trees)
- * snow = 0.3               # 0 to 1 (trees)
+ * season = summer          # spring, summer, autumn, winter (trees, plants)
+ * day = 160                # or a day of the year, 0 to 365: flowers and fruits (trees, plants)
+ * snow = 0.3               # 0 to 1 (trees, plants)
  * material.bark = game://materials/spruce-bark.material
  * material.leaves = game://materials/spruce-needles.material
+ * material.attachments = game://materials/spruce-cones.material
  * </pre>
+ *
+ * A plant ({@code .plant}, {@code generator = plant}, a {@code PlantSpecies} preset) has the slots {@code foliage}
+ * and {@code flowers}.
  *
  * Equal recipes are one asset: a recipe is a value, so it keys generated assets and the generation cache.
  *
- * @param generator the generator's id: {@code tree} or {@code rock}
- * @param preset the generator's preset, by name: a {@code TreeSpecies} or {@code RockParams} preset
+ * @param generator the generator's id: {@code tree}, {@code plant} or {@code rock}
+ * @param preset the generator's preset, by name: a {@code TreeSpecies}, {@code PlantSpecies} or {@code RockParams}
+ *     preset
  * @param seed the seed
  * @param season trees: the season
  * @param snow trees: the snow load
- * @param materials the material paths of the submeshes, by slot (trees: bark, leaves; rocks: rock); empty strings for
- *     none
+ * @param materials the material paths of the submeshes, by slot (trees: bark, leaves, attachments; plants: foliage,
+ *     flowers; rocks: rock); empty strings for none
+ * @param day trees and plants: the day of the year, or NaN for the season's
  */
-public record Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials) {
+public record Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials,
+    double day) {
 
     /** The material slots of each generator, in submesh order. */
-    static final List<String> TREE_SLOTS = List.of("bark", "leaves");
+    static final List<String> TREE_SLOTS = List.of("bark", "leaves", "attachments");
+    static final List<String> PLANT_SLOTS = List.of("foliage", "flowers");
     static final List<String> ROCK_SLOTS = List.of("rock");
 
     public Recipe {
         materials = List.copyOf(materials);
+        if (!Double.isNaN(day) && !(day >= 0 && day < 366)) {
+            throw new IllegalArgumentException("A day of the year is 0 to 365: " + day);
+        }
+    }
+
+    /** A recipe on its season's day. */
+    public Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials) {
+        this(generator, preset, seed, season, snow, materials, Double.NaN);
+    }
+
+    /** The day of the year it is generated for: its day, else its season's. */
+    public double dayOfYear() {
+        return Double.isNaN(day) ? season.day() : day;
     }
 
     /** Reads a recipe's text. */
@@ -50,6 +72,7 @@ public record Recipe(String generator, String preset, long seed, Season season, 
         long seed = 0;
         Season season = Season.SUMMER;
         double snow = 0;
+        double day = Double.NaN;
         List<String[]> slots = new ArrayList<>();
         int number = 0;
         for (String raw : text.split("\n")) {
@@ -71,6 +94,7 @@ public record Recipe(String generator, String preset, long seed, Season season, 
                 case "seed" -> seed = Long.parseLong(value);
                 case "season" -> season = Season.valueOf(value.toUpperCase(Locale.ROOT));
                 case "snow" -> snow = Double.parseDouble(value);
+                case "day" -> day = Double.parseDouble(value);
                 default -> {
                     if (!key.startsWith("material.")) {
                         throw new IllegalArgumentException("Line " + number + ": unknown key '" + key + "'");
@@ -84,6 +108,7 @@ public record Recipe(String generator, String preset, long seed, Season season, 
         }
         List<String> names = switch (generator) {
             case "tree" -> TREE_SLOTS;
+            case "plant" -> PLANT_SLOTS;
             case "rock" -> ROCK_SLOTS;
             default -> throw new IllegalArgumentException("Unknown generator '" + generator + "'");
         };
@@ -96,7 +121,7 @@ public record Recipe(String generator, String preset, long seed, Season season, 
             }
             materials[index] = slot[1];
         }
-        return new Recipe(generator, preset, seed, season, snow, List.of(materials));
+        return new Recipe(generator, preset, seed, season, snow, List.of(materials), day);
     }
 
     /**
@@ -106,6 +131,7 @@ public record Recipe(String generator, String preset, long seed, Season season, 
     @AllowAllocation("at load time")
     public String generationKey() {
         return "generator=" + generator + "\npreset=" + preset + "\nseed=" + seed + "\nseason=" + season.name()
-            + "\nsnow=" + Double.doubleToLongBits(snow) + "\n";
+            + "\nsnow=" + Double.doubleToLongBits(snow) + "\n"
+            + (Double.isNaN(day) ? "" : "day=" + Double.doubleToLongBits(day) + "\n");
     }
 }

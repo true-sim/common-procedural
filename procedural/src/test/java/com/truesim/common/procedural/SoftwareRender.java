@@ -20,6 +20,8 @@ public final class SoftwareRender {
     private final int height;
     private final float[] depth;
     private final int[] color;
+    private final int[] tag;
+    private int currentTag;
     // camera
     private double ex;
     private double ey;
@@ -28,12 +30,14 @@ public final class SoftwareRender {
     private double[] up = new double[3];
     private double[] forward = new double[3];
     private double focal;
+    private boolean flip;
 
     public SoftwareRender(int width, int height) {
         this.width = width;
         this.height = height;
         this.depth = new float[width * height];
         this.color = new int[width * height];
+        this.tag = new int[width * height];
     }
 
     /** Clears to a sky gradient and sets the camera at e looking at t, vertical field of view fov radians. */
@@ -57,12 +61,14 @@ public final class SoftwareRender {
             for (int x = 0; x < width; x++) {
                 color[y * width + x] = r << 16 | g << 8 | b;
                 depth[y * width + x] = Float.POSITIVE_INFINITY;
+                tag[y * width + x] = 0;
             }
         }
     }
 
     /** A ground plane at y 0, a grassy colour, out to {@code extent} metres. */
     public void ground(double extent) {
+        currentTag = -1;
         int tiles = 48;
         double step = 2 * extent / tiles;
         for (int i = 0; i < tiles; i++) {
@@ -83,6 +89,15 @@ public final class SoftwareRender {
      * moves each vertex by its index first.
      */
     public void draw(ProceduralMesh mesh, double ox, double oz, double yaw, Displace displace) {
+        draw(mesh, ox, oz, yaw, displace, null, Integer.MAX_VALUE);
+    }
+
+    /**
+     * Draws {@code mesh} as {@link #draw(ProceduralMesh, double, double, double, Displace)} does, its submeshes from
+     * {@code paletteFrom} on colored from {@code palette} by their texture coordinates, two-sided.
+     */
+    public void draw(ProceduralMesh mesh, double ox, double oz, double yaw, Displace displace,
+        com.truesim.common.procedural.flora.Palette palette, int paletteFrom) {
         Vec3Attribute position = mesh.vertices().attribute(ProceduralVertex.POSITION);
         Vec3Attribute normal = mesh.vertices().attribute(ProceduralVertex.NORMAL);
         Vec2Attribute uv = mesh.vertices().attribute(ProceduralVertex.UV);
@@ -115,13 +130,21 @@ public final class SoftwareRender {
         int[] indices = mesh.indices();
         int bark = mesh.submeshCount() == 1 ? 0x8a8580 : 0x6b4f3a; // rocks grey
         for (int sub = 0; sub < mesh.submeshCount(); sub++) {
-            boolean leaves = sub == 1;
+            boolean colored = palette != null && sub >= paletteFrom;
+            boolean leaves = sub == 1 && !colored;
             for (int t = mesh.submeshStart(sub); t < mesh.submeshEnd(sub); t += 3) {
                 int a = indices[t];
                 int b = indices[t + 1];
                 int d = indices[t + 2];
-                triangle(p, a, b, d, leaves ? 0x3f7a2c : bark, nn, 0, 0, 0, a, b, d, 0, 0, 0, leaves ? uvs : null,
-                    0, 0, 0);
+                int base = leaves ? 0x3f7a2c : bark;
+                if (colored) {
+                    base = palette.albedo(com.truesim.common.procedural.flora.Palette.part(uvs[2 * a + 1]),
+                        com.truesim.common.procedural.flora.Palette.t(uvs[2 * a])).toSrgb();
+                }
+                flip = colored;
+                currentTag = sub + 1;
+                triangle(p, a, b, d, base, nn, 0, 0, 0, a, b, d, 0, 0, 0, leaves ? uvs : null, 0, 0, 0);
+                flip = false;
             }
         }
     }
@@ -194,7 +217,7 @@ public final class SoftwareRender {
                 double vx = ex - p[3 * a];
                 double vy = ey - p[3 * a + 1];
                 double vz = ez - p[3 * a + 2];
-                if (nx * vx + ny * vy + nz * vz < 0 && uvs != null) {
+                if (nx * vx + ny * vy + nz * vz < 0 && (uvs != null || flip)) {
                     nx = -nx;
                     ny = -ny;
                     nz = -nz;
@@ -205,6 +228,7 @@ public final class SoftwareRender {
                 int bl = Math.min(255, (int) ((base & 255) * light));
                 depth[pixel] = (float) z;
                 color[pixel] = r << 16 | g << 8 | bl;
+                tag[pixel] = currentTag;
             }
         }
     }
@@ -220,6 +244,34 @@ public final class SoftwareRender {
         double x = dx * right[0] + dy * right[1] + dz * right[2];
         double y = dx * up[0] + dy * up[1] + dz * up[2];
         return new double[] {width / 2.0 + focal * x / z, height / 2.0 - focal * y / z, z};
+    }
+
+    /** Pixels whose nearest surface is submesh {@code submesh} of a drawn mesh (-1: none of them, the ground's). */
+    public int pixels(int submesh) {
+        int n = 0;
+        for (int t : tag) {
+            n += t == submesh + 1 ? 1 : 0;
+        }
+        return n;
+    }
+
+    /** Pixels covered by any drawn mesh (not sky, not ground). */
+    public int covered() {
+        int n = 0;
+        for (int t : tag) {
+            n += t > 0 ? 1 : 0;
+        }
+        return n;
+    }
+
+    /** The color at a pixel, 0xRRGGBB. */
+    public int rgb(int x, int y) {
+        return color[y * width + x];
+    }
+
+    /** The submesh (plus one) seen at a pixel: 0 sky, -1 ground. */
+    public int tag(int x, int y) {
+        return tag[y * width + x];
     }
 
     public BufferedImage image() {

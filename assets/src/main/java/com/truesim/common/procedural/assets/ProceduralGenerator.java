@@ -1,7 +1,13 @@
 package com.truesim.common.procedural.assets;
 
 import com.truesim.annotations.AllowAllocation;
+import com.truesim.common.procedural.flora.Palette;
 import com.truesim.common.procedural.mesh.ProceduralMesh;
+import com.truesim.common.procedural.plant.Plant;
+import com.truesim.common.procedural.plant.PlantGenerator;
+import com.truesim.common.procedural.plant.PlantOptions;
+import com.truesim.common.procedural.plant.PlantSpecies;
+import com.truesim.common.procedural.plant.Plants;
 import com.truesim.common.procedural.rock.RockGenerator;
 import com.truesim.common.procedural.rock.RockParams;
 import com.truesim.common.procedural.rock.Rocks;
@@ -34,6 +40,34 @@ public interface ProceduralGenerator {
         return true;
     }
 
+    /**
+     * The colors of {@code recipe}'s flowers, fruits and small parts (the {@code #palette} texture), or {@code null}
+     * for a generator without.
+     */
+    default Palette palette(Recipe recipe) {
+        return null;
+    }
+
+    /** The tree species preset named {@code name}. */
+    static TreeSpecies treeSpecies(String name) {
+        for (TreeSpecies preset : TreeSpecies.PRESETS) {
+            if (preset.name().equals(name)) {
+                return preset;
+            }
+        }
+        throw new IllegalArgumentException("No tree species '" + name + "'");
+    }
+
+    /** The plant species preset named {@code name}. */
+    static PlantSpecies plantSpecies(String name) {
+        for (PlantSpecies preset : PlantSpecies.PRESETS) {
+            if (preset.name().equals(name)) {
+                return preset;
+            }
+        }
+        throw new IllegalArgumentException("No plant species '" + name + "'");
+    }
+
     /** Trees ({@link Trees}): the levels of {@link TreeOptions#DEFAULTS}, then the billboard. */
     ProceduralGenerator TREES = new ProceduralGenerator() {
         @Override
@@ -49,20 +83,50 @@ public interface ProceduralGenerator {
         @Override
         @AllowAllocation("at load time")
         public List<ProceduralMesh> generate(Recipe recipe) {
-            TreeSpecies species = null;
-            for (TreeSpecies preset : TreeSpecies.PRESETS) {
-                if (preset.name().equals(recipe.preset())) {
-                    species = preset;
-                }
-            }
-            if (species == null) {
-                throw new IllegalArgumentException("No tree species '" + recipe.preset() + "'");
-            }
+            TreeSpecies species = treeSpecies(recipe.preset());
             TreeOptions options = TreeOptions.DEFAULTS.withSeason(recipe.season()).withSnowLoad(recipe.snow());
+            if (!Double.isNaN(recipe.day())) {
+                options = options.withDay(recipe.day());
+            }
             Tree tree = Trees.generate(species, options, recipe.seed());
             List<ProceduralMesh> meshes = new ArrayList<>(tree.lods());
             meshes.add(tree.billboard());
             return meshes;
+        }
+
+        @Override
+        public Palette palette(Recipe recipe) {
+            TreeSpecies species = treeSpecies(recipe.preset());
+            return species.fruiting() == null ? Palette.DEFAULT : species.fruiting().palette();
+        }
+    };
+
+    /** Small plants and clumps ({@link Plants}): their levels of detail, then the billboard. */
+    ProceduralGenerator PLANTS = new ProceduralGenerator() {
+        @Override
+        public String id() {
+            return "plant";
+        }
+
+        @Override
+        public int version() {
+            return PlantGenerator.VERSION;
+        }
+
+        @Override
+        @AllowAllocation("at load time")
+        public List<ProceduralMesh> generate(Recipe recipe) {
+            PlantSpecies species = plantSpecies(recipe.preset());
+            PlantOptions options = PlantOptions.DEFAULTS.withDay(recipe.dayOfYear()).withSnowLoad(recipe.snow());
+            Plant plant = Plants.generate(species, options, recipe.seed());
+            List<ProceduralMesh> meshes = new ArrayList<>(plant.lods());
+            meshes.add(plant.billboard());
+            return meshes;
+        }
+
+        @Override
+        public Palette palette(Recipe recipe) {
+            return plantSpecies(recipe.preset()).palette();
         }
     };
 

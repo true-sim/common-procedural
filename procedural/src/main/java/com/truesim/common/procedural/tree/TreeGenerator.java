@@ -5,6 +5,9 @@ import com.truesim.common.math.Vec3;
 import com.truesim.common.math.geometry.Sphere;
 import com.truesim.common.math.random.Rng;
 import com.truesim.common.procedural.Seeds;
+import com.truesim.common.procedural.flora.FloraSummary;
+import com.truesim.common.procedural.flora.Fruiting;
+import com.truesim.common.procedural.flora.Palette;
 import com.truesim.common.procedural.mesh.MeshWriter;
 import com.truesim.common.procedural.mesh.ProceduralMesh;
 import com.truesim.common.procedural.mesh.ProceduralVertex;
@@ -23,13 +26,14 @@ import java.util.List;
 public final class TreeGenerator {
 
     /** Version of the generated output: changes whenever the same inputs would give different meshes. */
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     private final Skeleton skeleton = new Skeleton();
     private final ParametricGrowth parametric = new ParametricGrowth();
     private final SpaceColonization colonization = new SpaceColonization();
     private final TreeWind wind = new TreeWind();
     private final TreeMesher mesher = new TreeMesher();
+    private final Attachments attachments = new Attachments();
     private final MeshWriter billboard = new MeshWriter();
     private double[] scratchA = new double[1024];
     private double[] scratchB = new double[1024];
@@ -51,14 +55,19 @@ public final class TreeGenerator {
         } else {
             colonization.grow(skeleton, species, height, growth);
         }
-        snow(species.snowDroop() * options.snowLoad());
+        Fruiting fruiting = species.fruiting();
+        // Snow, and a crop of fruit, weigh the branches down
+        double crop = fruiting == null ? 0 : fruiting.weightDroop() * attachments.load(fruiting, options.day());
+        snow(species.snowDroop() * options.snowLoad() + crop);
         Vec3 crown = new Vec3(0, height * (1 + species.crownBase()) / 2, 0);
         LeafPlacement.place(skeleton, species.foliage(), crown, Rng.seeded(Seeds.derive(seed, 2)));
+        attachments.place(skeleton, fruiting, height, crown, Rng.seeded(Seeds.derive(seed, 3)));
+        boolean alt = (Seeds.derive(seed, 4) & 1) != 0; // the second cultivar's fruit color
         skeleton.pipeRadii(species.pipeExponent(), species.baseRadius() * height / species.height());
         wind.compute(skeleton, seed);
         double[] barkV = barkV(species.barkTileLength());
         TreeMesher.Context context = new TreeMesher.Context(species, options.season(), wind, barkV, crown.x(),
-            crown.y(), crown.z());
+            crown.y(), crown.z(), options.day(), alt, attachments);
         List<ProceduralMesh> lods = new ArrayList<>(options.lods().size());
         double error = 0;
         for (TreeLod lod : options.lods()) {
@@ -71,9 +80,13 @@ public final class TreeGenerator {
         double crownRadius = crownRadius(full);
         Vec3 center = full.center();
         double radius = full.bounds().max().sub(full.bounds().min()).length() * 0.5;
+        FloraSummary flora = attachments.summary(fruiting, options.day(), alt);
+        double coverage = Math.min(1, flora.area() / Math.max(2 * crownRadius * top, 1e-9));
         ImpostorHints impostor = new ImpostorHints(new Sphere(center, radius), options.impostorFrames(),
-            options.impostorResolution());
-        return new Tree(species, seed, lods, billboard(top, crownRadius), impostor, top, crownRadius);
+            options.impostorResolution(), flora.albedo(), coverage);
+        Palette palette = fruiting == null ? Palette.DEFAULT : fruiting.palette();
+        return new Tree(species, seed, lods, billboard(top, crownRadius), impostor, top, crownRadius, flora,
+            palette);
     }
 
     /**
@@ -84,21 +97,55 @@ public final class TreeGenerator {
         return skeleton;
     }
 
-    /** One level, within its budget: leaf cards and thin branches dropped further until it fits. */
+    /** The wind data of the tree generated last; for tests. */
+    TreeWind wind() {
+        return wind;
+    }
+
+    /** The flowers', fruits' and cones' sites of the tree generated last; for tests. */
+    Attachments attachments() {
+        return attachments;
+    }
+
+    /**
+     * One level, within its budget: flowers and fruits simplified and merged, then leaf cards and thin branches
+     * dropped further, flowers and fruits dropped last, until it fits.
+     */
     private ProceduralMesh level(TreeMesher.Context context, TreeLod lod, double finer) {
         int keep = lod.leafKeep();
         // Small trees and shrubs keep their stems at every level
         double minRadius = Math.min(lod.minRadius(), 0.6 * skeleton.radius(0));
         double cardLength = context.species().foliage().length();
+        Fruiting fruiting = context.species().fruiting();
+        int detail = attachments.count() == 0 ? TreeLod.NO_ATTACHMENTS : lod.attachmentDetail();
         for (int attempt = 0; ; attempt++) {
             // At least the finer level's: a coarser level never claims to be closer to the tree
-            double error = Math.max(finer, Math.max(2 * minRadius, cardLength * (Math.sqrt(keep) - 1)));
-            ProceduralMesh mesh = mesher.mesh(skeleton, context, lod, keep, minRadius, error);
+            double error = Math.max(finer, Math.max(Math.max(2 * minRadius, cardLength * (Math.sqrt(keep) - 1)),
+                Attachments.error(fruiting, attachments.count() == 0 ? 0 : detail)));
+            ProceduralMesh mesh = mesher.mesh(skeleton, context, lod, keep, minRadius, detail, error);
             if (mesh.triangleCount() <= lod.triangleBudget() || attempt == 16) {
                 return mesh;
             }
-            keep += Math.max(1, keep / 2);
-            minRadius *= 1.4;
+            // flowers and fruits simplified and merged first, then leaves and twigs thinned; dropped last. Where they
+            // are too few to make the difference, both at once: every attempt meshes the whole tree again
+            int over = mesh.triangleCount() - lod.triangleBudget();
+            int attached = (mesh.submeshEnd(Tree.ATTACHMENTS) - mesh.submeshStart(Tree.ATTACHMENTS)) / 3;
+            if (detail < 2) {
+                // simplifying keeps about a third: when that cannot fit, merge at once (a pass saved)
+                detail = detail == 0 && mesh.triangleCount() - 0.65 * attached > lod.triangleBudget() ? 2 : detail + 1;
+                if (attached < over) {
+                    keep += Math.max(1, keep / 2);
+                    minRadius *= 1.4;
+                }
+            } else if (detail == 2 && keep > 6 * lod.leafKeep()) {
+                // even thinned leaves leave no room: drop flowers and fruits, and start thinning over
+                detail++;
+                keep = lod.leafKeep();
+                minRadius = Math.min(lod.minRadius(), 0.6 * skeleton.radius(0));
+            } else {
+                keep += Math.max(1, keep / 2);
+                minRadius *= 1.4;
+            }
         }
     }
 

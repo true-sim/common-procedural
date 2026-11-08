@@ -1,6 +1,7 @@
 package com.truesim.common.procedural.assets;
 
 import com.truesim.annotations.AllowAllocation;
+import com.truesim.common.procedural.flora.Palette;
 import com.truesim.common.procedural.mesh.ProceduralMesh;
 import com.truesim.scene.assets.AssetInput;
 import com.truesim.scene.assets.AssetLoader;
@@ -13,6 +14,9 @@ import com.truesim.scene.assets.mesh.MeshData;
 import com.truesim.scene.render.MaterialData;
 import com.truesim.scene.render.ModelData;
 import com.truesim.scene.render.RenderAssets;
+import com.truesim.scene.render.TextureData;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -23,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Procedural assets through the scene's asset system. Recipe files ({@code .tree}, {@code .rock}; see
+ * Procedural assets through the scene's asset system. Recipe files ({@code .tree}, {@code .plant}, {@code .rock}; see
  * {@link Recipe}) under any mount import as meshes and models that scenes reference like any other:
  *
  * <pre>{@code
@@ -38,7 +42,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <ul>
  *   <li><b>Fragments</b> of a recipe's path: none or {@code #lod/0} the most detailed level, {@code #lod/N} level N,
- *       {@code #billboard} a tree's billboard. A model is one node with the recipe's level 0 and its materials.</li>
+ *       {@code #billboard} a tree's or plant's billboard; as a texture, {@code #palette} the colors of its flowers,
+ *       fruits and small parts (the base color of the attachments, foliage and flowers slots). A model is one node
+ *       with the recipe's level 0 and its materials.</li>
  *   <li><b>In the background:</b> the cache runs importers on its asset lane (the job system), so generating never
  *       blocks the frame; loads finish at the frame boundary as all assets do.</li>
  *   <li><b>Generated once:</b> meshes go through a {@link GenerationCache} keyed by the recipe and the generator's
@@ -56,7 +62,7 @@ public final class ProceduralAssets {
     /** Recipes, read from recipe files. */
     public static final AssetType<Recipe> RECIPE = AssetType.of("procedural-recipe", Recipe.class, recipe -> 256);
     /** The file extensions of recipes. */
-    public static final List<String> EXTENSIONS = List.of("tree", "rock");
+    public static final List<String> EXTENSIONS = List.of("tree", "plant", "rock");
 
     /** A generated mesh's key: the recipe and which of its meshes. */
     record MeshKey(Recipe recipe, int index) {
@@ -77,6 +83,7 @@ public final class ProceduralAssets {
         this.paths = paths;
         this.cache = cache;
         generator(ProceduralGenerator.TREES);
+        generator(ProceduralGenerator.PLANTS);
         generator(ProceduralGenerator.ROCKS);
     }
 
@@ -92,9 +99,11 @@ public final class ProceduralAssets {
         AssetLoader<Recipe> recipes = ProceduralAssets::readRecipe;
         AssetLoader<MeshData> meshImporter = this::importMesh;
         AssetLoader<ModelData> modelImporter = this::importModel;
+        AssetLoader<TextureData> textureImporter = this::importTexture;
         for (String extension : EXTENSIONS) {
             paths.importers().add(RECIPE, extension, recipes).add(RenderAssets.MESH, extension, meshImporter)
-                .add(RenderAssets.MODEL, extension, modelImporter);
+                .add(RenderAssets.MODEL, extension, modelImporter).add(RenderAssets.TEXTURE, extension,
+                    textureImporter);
         }
         return this;
     }
@@ -161,7 +170,7 @@ public final class ProceduralAssets {
         int index;
         if (fragment == null || fragment.isEmpty()) {
             index = 0;
-        } else if (fragment.equals("billboard") && recipe.generator().equals("tree")) {
+        } else if (fragment.equals("billboard") && !recipe.generator().equals("rock")) {
             index = meshes(recipe).size() - 1;
         } else if (fragment.startsWith("lod/")) {
             index = Integer.parseInt(fragment.substring("lod/".length()));
@@ -169,6 +178,29 @@ public final class ProceduralAssets {
             throw new IllegalArgumentException("No mesh '#" + fragment + "' in " + input.path());
         }
         return sceneMesh(recipe, index);
+    }
+
+    /** {@code #palette}: the colors of a tree's or plant's flowers, fruits and small parts, as an sRGB texture. */
+    @AllowAllocation("at load time")
+    private TextureData importTexture(AssetInput input) throws Exception {
+        Recipe recipe = readRecipe(input);
+        if (!"palette".equals(input.path().fragment())) {
+            throw new IllegalArgumentException("No texture '#" + input.path().fragment() + "' in " + input.path());
+        }
+        return palette(recipe);
+    }
+
+    /** The palette texture of {@code recipe}: its flowers', fruits' and small parts' colors. */
+    @AllowAllocation("at load time")
+    public TextureData palette(Recipe recipe) {
+        ProceduralGenerator generator = generators.get(recipe.generator());
+        Palette palette = generator == null ? null : generator.palette(recipe);
+        if (palette == null) {
+            throw new IllegalArgumentException("A " + recipe.generator() + " has no palette");
+        }
+        MemorySegment texels = Arena.ofAuto().allocate(4L * palette.width() * palette.height());
+        MemorySegment.copy(MemorySegment.ofArray(palette.texels()), 0, texels, 0, texels.byteSize());
+        return new TextureData(palette.width(), palette.height(), TextureData.ColorSpace.SRGB, texels);
     }
 
     @AllowAllocation("at load time")

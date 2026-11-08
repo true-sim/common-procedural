@@ -42,12 +42,15 @@ final class TreeMesher {
 
     /** Everything about a tree the mesher reads besides its skeleton. */
     record Context(TreeSpecies species, Season season, TreeWind wind, double[] barkV, double crownX, double crownY,
-        double crownZ) {
+        double crownZ, double day, boolean alt, Attachments attachments) {
     }
 
-    /** The level {@code lod} of the tree, leaving out leaf cards but one in {@code keep}, branches below
-     * {@code minRadius}. */
-    ProceduralMesh mesh(Skeleton skeleton, Context context, TreeLod lod, int keep, double minRadius, double error) {
+    /**
+     * The level {@code lod} of the tree, leaving out leaf cards but one in {@code keep}, branches below
+     * {@code minRadius}, flowers and fruits at {@code attachmentDetail}.
+     */
+    ProceduralMesh mesh(Skeleton skeleton, Context context, TreeLod lod, int keep, double minRadius,
+        int attachmentDetail, double error) {
         writer.reset();
         for (int b = 0; b < skeleton.branchCount(); b++) {
             if (skeleton.radius(skeleton.firstNode(b)) >= minRadius) {
@@ -63,6 +66,9 @@ final class TreeMesher {
                 }
             }
         }
+        writer.nextSubmesh();
+        context.attachments().mesh(writer, context.species().fruiting(), context.wind(), context.day(),
+            attachmentDetail, context.alt());
         return writer.build(error);
     }
 
@@ -291,8 +297,11 @@ final class TreeMesher {
         double gx = skeleton.leaf(i, 6);
         double gy = skeleton.leaf(i, 7);
         double gz = skeleton.leaf(i, 8);
-        double length = skeleton.leaf(i, 9) * scale;
-        double width = skeleton.leaf(i, 10) * scale;
+        // Deciduous leaves unfold through spring: a third of their size in April, half at apple blossom, full by mid June
+        double grown = foliage.deciduous() ? 0.35 + 0.65 * com.truesim.common.procedural.flora.Phenology.smooth(110,
+            165, context.day() % 365) : 1;
+        double length = skeleton.leaf(i, 9) * scale * grown;
+        double width = skeleton.leaf(i, 10) * scale * grown;
         // Across the card: direction x normal, so normal x across = direction (bitangent along +v)
         double wx = dy * gz - dz * gy;
         double wy = dz * gx - dx * gz;

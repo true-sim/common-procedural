@@ -71,6 +71,7 @@ class ProceduralFilms {
         int atlas = stage.texture(atlasImage);
         int material = stage.treeMaterial(bark, false, 0.9f, reach);
         stage.treeMaterial(atlas, true, 0.92f, reach); // the leaves: the next material
+        stage.paletteMaterial(stage.texture(Looks.palette(tree.palette())), 0.55f, reach, 0.02f); // cones, flowers
         int capture = stage.texture(Looks.capture(tree, atlasImage, 512));
         int billboard = stage.treeMaterial(capture, true, 0.85f, reach);
         int[] meshes = new int[tree.lods().size() + 1];
@@ -88,13 +89,13 @@ class ProceduralFilms {
             billboard ? placed.billboardMaterial() : placed.material(), x, z, yaw, 1);
     }
 
-    private static Path folder(String film) throws IOException {
+    static Path folder(String film) throws IOException {
         Path out = Path.of(System.getProperty("truesim.films", "build/films"), film);
         Files.createDirectories(out);
         return out;
     }
 
-    private static void write(BufferedImage big, Path folder, int frame) throws IOException {
+    static void write(BufferedImage big, Path folder, int frame) throws IOException {
         BufferedImage small = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < HEIGHT; y++) {
             for (int x = 0; x < WIDTH; x++) {
@@ -116,7 +117,7 @@ class ProceduralFilms {
         ImageIO.write(small, "png", folder.resolve(String.format(Locale.ROOT, "f%04d.png", frame)).toFile());
     }
 
-    private static ProceduralWindParameters wind(double speed) {
+    static ProceduralWindParameters wind(double speed) {
         return ProceduralWindParameters.DEFAULTS.withDirection(WIND).withSpeed((float) speed);
     }
 
