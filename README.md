@@ -250,7 +250,7 @@ a grass's blades) from the foot, flowering stems leaning out and nodding over, w
 alternate) and side branches, and a flower or a seed head on each, as the day says; leaves simple, trifoliate
 (clover) or palmately lobed (buttercup) on stalks, grown in spring, withering in autumn, dead through the winter;
 snow presses them down. Submesh 0 is the foliage, 1 the flowers, both colored from `Plant.palette()`. Three levels
-(full, simplified with half the leaves, minimal with a quarter; budgets 6,000, 1,500 and 300 triangles) and a
+(full, simplified with half the leaves, minimal with a quarter; budgets 6,000, 1,500 and 500 triangles) and a
 billboard. **Wind** in the trees' format without a trunk: everything sways about the foot (pivot height 0, reach the
 plant's height) by `(s / height)^1.5` of its path from the foot, leaves and petals flutter toward their tips, each stem
 and leaf with a phase of its own: effects-vegetation's plant material sways them as it does trees.

@@ -130,13 +130,13 @@ public record PlantSpecies(String name, double height, double heightVariation, d
      * flowering in June, ripening to straw in July and August; the blades straw-brown from October.
      */
     public static final PlantSpecies GRASS = new PlantSpecies("grass", 0.45, 0.25, 0.04, 3, 8, 0.3, 0.25, 0.0012, 0,
-        new LeafSpec(30, 50, 0.28, 0.005, Outline.BLADE, 1.2, -1.1, 0.35, 1, 0),
+        new LeafSpec(45, 70, 0.26, 0.004, Outline.BLADE, 0.95, -1.5, 0.35, 1, 0),
         new LeafSpec(1, 1, 0.1, 0.003, Outline.BLADE, 0.5, -0.5, 0.3, 1, 0),
-        null, new FruitShape(FruitShape.Form.SPIKE, 0.0045, 6, 0.15, 0, 9, 0, 0), 0.2,
+        null, new FruitShape(FruitShape.Form.SPIKE, 0.003, 7, 0.15, 0, 9, 0, 0), 0.2,
         new Phenology(20, 160, 185, 12, 195, 215, 15, 260, 330), 1, 95, 280, 0.6, true,
         Palette.DEFAULT
-            .with(Part.FRUIT, new Ramp(a(0.1, 0.16, 0.05), a(0.2, 0.11, 0.12), a(0.4, 0.35, 0.2)))
-            .with(Part.FRUIT_ALT, new Ramp(a(0.1, 0.16, 0.05), a(0.2, 0.11, 0.12), a(0.4, 0.35, 0.2))));
+            .with(Part.FRUIT, new Ramp(a(0.1, 0.16, 0.05), a(0.17, 0.15, 0.09), a(0.4, 0.35, 0.2)))
+            .with(Part.FRUIT_ALT, new Ramp(a(0.1, 0.16, 0.05), a(0.17, 0.15, 0.09), a(0.4, 0.35, 0.2))));
 
     /** Every preset. */
     public static final List<PlantSpecies> PRESETS = List.of(GENTIAN, ARNICA, ASTER, EDELWEISS, BUTTERCUP, CLOVER,

@@ -2,7 +2,7 @@ package com.truesim.common.procedural.plant;
 
 /**
  * How one level of detail of a small plant is meshed: the shapes' detail, how many of its leaves and blades it keeps
- * (the kept ones wider to cover as much), and the triangle budget it must keep. Over budget, it keeps fewer.
+ * (the kept ones a little wider), and the triangle budget it must keep. Over budget, it keeps fewer.
  *
  * @param detail 0 full (petals, sepals, curved leaves), 1 simplified, 2 minimal (a leaf a triangle or two)
  * @param keep keep one leaf or blade in this many
@@ -22,5 +22,5 @@ public record PlantLod(int detail, int keep, int triangleBudget) {
     /** Medium: simpler shapes, half the leaves. */
     public static final PlantLod MEDIUM = new PlantLod(1, 2, 1500);
     /** Far: minimal shapes, a quarter of the leaves. */
-    public static final PlantLod LOW = new PlantLod(2, 4, 300);
+    public static final PlantLod LOW = new PlantLod(2, 4, 500);
 }

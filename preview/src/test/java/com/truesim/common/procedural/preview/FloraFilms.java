@@ -210,7 +210,11 @@ class FloraFilms {
     @Test
     @EnabledIfEnvironmentVariable(named = "TRUESIM_FLORA_FILMS", matches = "true")
     void plantTurntables() throws IOException {
+        String only = System.getenv("TRUESIM_FLORA_ONLY");
         for (PlantSpecies species : PlantSpecies.PRESETS) {
+            if (only != null && !only.contains(species.name())) {
+                continue;
+            }
             double bloom = species.phenology().peakBloom();
             double late = species.grass() ? species.phenology().ripenEnd() + 5 : 285;
             Path out = ProceduralFilms.folder("turntable-" + species.name());
@@ -351,8 +355,8 @@ class FloraFilms {
                 }
                 variants.add(some);
             }
-            double[] points = new double[2 * 4000];
-            int count = PoissonDisc.sample(Rng.seeded(5), 7, 7, 0.13, 30, points);
+            double[] points = new double[2 * 8000];
+            int count = Math.min(3900, PoissonDisc.sample(Rng.seeded(5), 7, 7, 0.11, 30, points));
             Rng rng = Rng.seeded(6);
             for (int i = 0; i < count; i++) {
                 double x = points[2 * i] - 3.5;

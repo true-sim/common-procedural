@@ -114,7 +114,7 @@ public final class PlantGenerator {
         for (int i = 0; i < basal; i++) {
             double azimuth = i * 2.399963 + 0.6 * (rng.nextDouble() - 0.5);
             double offset = species.spread() * 0.6 * Math.sqrt(rng.nextDouble());
-            double rise = species.basal().rise() + 0.35 * (rng.nextDouble() - 0.5);
+            double rise = Math.max(0.03, species.basal().rise() + 0.35 * (rng.nextDouble() - 0.5));
             double length = species.basal().length() * (0.75 + 0.5 * rng.nextDouble()) * grown;
             double phase = rng.nextDouble();
             double twist = rng.nextDouble() - 0.5;
@@ -123,7 +123,7 @@ public final class PlantGenerator {
             }
             Vec3 out = new Vec3(Maths.cos(azimuth), 0, Maths.sin(azimuth));
             Vec3 foot = out.scale(offset);
-            leaf(species, species.basal(), foot, out, rise * (1 - flatten), length, Math.sqrt(keep), 0, reach,
+            leaf(species, species.basal(), foot, out, rise * (1 - flatten), length, Math.min(Math.sqrt(keep), 1.6), 0, reach,
                 phase, twist, detail, foliage, withered);
         }
         // Stems with their leaves, side branches and heads
@@ -152,9 +152,11 @@ public final class PlantGenerator {
     /** A leaf (or a palmate or trifoliate one's leaflets) from {@code foot} toward {@code out}, rising. */
     private void leaf(PlantSpecies species, LeafSpec spec, Vec3 foot, Vec3 out, double rise, double length,
         double widen, double path, double reach, double phase, double twist, int detail, Part part, double withered) {
+        // a leaf from the ground arches over at most to the level, never into the soil
+        double archAt = foot.y() < 1e-6 ? Math.max(spec.arch(), -rise) : spec.arch();
         Vec3 direction = out.scale(Maths.cos(rise)).add(0, Maths.sin(rise), 0).normalize();
         Vec3 side = Vec3.UP.cross(out).normalize();
-        Vec3 normal = side.cross(direction).normalize();
+        Vec3 normal = direction.cross(side).normalize(); // the upper face, toward the sky and the plant's middle
         normal = FloraWriter.turn(normal, side, 0.4 * twist);
         Vec3 base = foot;
         double s = path;
@@ -187,7 +189,7 @@ public final class PlantGenerator {
             double scale = leaflets == 1 ? 1 : 1 - 0.25 * Math.abs(angle);
             double l = length * scale;
             flora.strip(base, d, normal, l, spec.width() * widen * scale * Math.min(1, length / spec.length() + 0.3),
-                spec.outline(), spec.arch(), spec.fold(), segments, part, withered, 0, flutter, weight(s, reach),
+                spec.outline(), archAt, spec.fold(), segments, part, withered, 0, flutter, weight(s, reach),
                 weight(s + l, reach));
         }
     }
