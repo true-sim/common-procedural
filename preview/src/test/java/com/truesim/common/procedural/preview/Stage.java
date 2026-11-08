@@ -73,18 +73,30 @@ final class Stage implements AutoCloseable {
     private float[] sun = normalize(-0.45f, 0.6f, -0.65f);
     private int nextId;
     private final boolean large;
+    private final int soil;
     private SceneView view;
     private Shadows shadows;
     private double time;
     private ProceduralWindParameters wind = ProceduralWindParameters.DEFAULTS;
 
     Stage(VulkanDevice device, int width, int height, double groundSize) {
-        this(device, width, height, groundSize, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64), 1 << 12);
+        this(device, width, height, groundSize, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64), 1 << 12, 150);
+    }
+
+    /** A stage whose sun casts shadows out to {@code shadowRange} metres (small plants want a short range). */
+    Stage(VulkanDevice device, int width, int height, double groundSize, double shadowRange) {
+        this(device, width, height, groundSize, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64), 1 << 12, shadowRange);
     }
 
     /** A stage with room for {@code capacity} in its geometry pool and {@code instances} instances to start with. */
     Stage(VulkanDevice device, int width, int height, double groundSize, GeometryPool.Capacity capacity,
         int instances) {
+        this(device, width, height, groundSize, capacity, instances, 150);
+    }
+
+    /** A stage with room for {@code capacity}, {@code instances} and sun shadows out to {@code shadowRange}. */
+    Stage(VulkanDevice device, int width, int height, double groundSize, GeometryPool.Capacity capacity,
+        int instances, double shadowRange) {
         this.device = device;
         this.width = width;
         this.height = height;
@@ -104,12 +116,14 @@ final class Stage implements AutoCloseable {
         scene.setMaterials(materials);
         if (groundSize > 0) {
             int ground = pool.add(ground(groundSize, 64));
-            int soil = materials.add(new Material(MetallicRoughnessParameters.DEFAULTS
+            soil = materials.add(new Material(MetallicRoughnessParameters.DEFAULTS
                 .withBaseColor(new Color(0.06f, 0.08f, 0.03f, 1)).withRoughness(0.95f).withMetallic(0)));
             scene.set(nextId++, ground, soil, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        } else {
+            soil = -1;
         }
         lights.directional(0, -sun[0], -sun[1], -sun[2], 4.2f, 3.9f, 3.4f);
-        lights.shadow(0, ShadowSpec.cascades(4, 2048, 150));
+        lights.shadow(0, ShadowSpec.cascades(4, 2048, (float) shadowRange));
         lights.setCount(1);
     }
 
@@ -191,6 +205,29 @@ final class Stage implements AutoCloseable {
             material = material.doubleSided(true).alphaMask(0.5f);
         }
         return materials.add(material);
+    }
+
+    /**
+     * A palette material for flowers, fruits and small plants: colored by the palette texture, two-sided (petals and
+     * leaves are single sheets), swaying within {@code reach} metres.
+     */
+    int paletteMaterial(int texture, float roughness, float reach, float branchSway) {
+        ProceduralTreeParameters p = ProceduralTreeParameters.DEFAULTS.withBranchSway(branchSway)
+            .withBase(MetallicRoughnessParameters.DEFAULTS.withBaseColorTexture(texture).withRoughness(roughness)
+                .withMetallic(0));
+        return materials.add(new Material(p).displacement(reach).doubleSided(true));
+    }
+
+    /** The ground's color (linear): soil, or snow. */
+    void ground(float r, float g, float b) {
+        materials.set(soil, new Material(MetallicRoughnessParameters.DEFAULTS.withBaseColor(new Color(r, g, b, 1))
+            .withRoughness(0.95f).withMetallic(0)));
+    }
+
+    /** Removes {@code mesh} from the pool once the GPU is done with it. */
+    void remove(int mesh) {
+        device.waitIdle();
+        pool.remove(mesh);
     }
 
     /** A plain material, no wind: rocks. */

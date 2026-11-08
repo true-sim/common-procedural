@@ -38,6 +38,13 @@ final class Looks {
             case "larch" -> new int[] {0x8cbf4a, 0x5f8f35, 0xd99a2b, 0x5f8f35};
             case "beech" -> new int[] {0x8fc24d, 0x4d7a2a, 0xb8642a, 0x4d7a2a};
             case "birch" -> new int[] {0x9ccc58, 0x5d8f30, 0xd8b23a, 0x5d8f30};
+            case "rowan" -> new int[] {0x8cc052, 0x4f7f2e, 0xc2582a, 0x4f7f2e};
+            case "apple" -> new int[] {0x92c25a, 0x4c7a2e, 0xb59a3a, 0x4c7a2e};
+            case "elder" -> new int[] {0x86b84c, 0x46742a, 0x9a8a3a, 0x46742a};
+            case "dogrose" -> new int[] {0x86b450, 0x4a7430, 0xb0602e, 0x4a7430};
+            case "alpenrose" -> new int[] {0x3e6a2c, 0x2c5222, 0x2c5222, 0x2a4a22};
+            case "blueberry" -> new int[] {0x8cc456, 0x52862e, 0xb8402c, 0x52862e};
+            case "lingonberry" -> new int[] {0x4a7a32, 0x2e5a24, 0x2e5a24, 0x3a4a24};
             default -> new int[] {0x86b84a, 0x4f7f2b, 0xc79a35, 0x4f7f2b};
         };
     }
@@ -131,6 +138,12 @@ final class Looks {
             case "pine" -> 0x8a5536;
             case "beech" -> 0x8f8d86;
             case "birch" -> 0xe8e4dc;
+            case "rowan" -> 0x8a8278;
+            case "apple" -> 0x7a6656;
+            case "elder" -> 0x9a8c74;
+            case "dogrose" -> 0x6a7040;
+            case "blueberry" -> 0x4f7a34;
+            case "alpenrose", "lingonberry" -> 0x6a5040;
             default -> 0x6b5545;
         };
         for (int y = 0; y < 256; y++) {
@@ -147,6 +160,20 @@ final class Looks {
                 double value = birch ? 1 - 0.7 * Math.max(0, noise.simplex(cu * 1.5, su * 1.5, cv * 4 + sv * 4) - 0.35)
                     : 0.55 + 0.3 * furrow + 0.25 * n;
                 image.setRGB(x, y, 0xff000000 | shade(base, value).getRGB() & 0xffffff);
+            }
+        }
+        return image;
+    }
+
+    /** A palette's texture: its sRGB texels as an image. */
+    static BufferedImage palette(com.truesim.common.procedural.flora.Palette palette) {
+        byte[] texels = palette.texels();
+        BufferedImage image = new BufferedImage(palette.width(), palette.height(), BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < palette.height(); y++) {
+            for (int x = 0; x < palette.width(); x++) {
+                int o = 4 * (y * palette.width() + x);
+                image.setRGB(x, y, (texels[o + 3] & 255) << 24 | (texels[o] & 255) << 16 | (texels[o + 1] & 255) << 8
+                    | texels[o + 2] & 255);
             }
         }
         return image;
@@ -176,9 +203,15 @@ final class Looks {
      * texture's mean color, its leaf cards cut by the atlas's alpha, simply lit; transparent elsewhere.
      */
     static BufferedImage capture(Tree tree, BufferedImage atlas, int size) {
-        ProceduralMesh mesh = tree.lods().getFirst();
-        double radius = tree.crownRadius();
-        double top = tree.height();
+        return capture(tree.lods().getFirst(), tree.crownRadius(), tree.height(), atlas, tree.palette(), 1, 2, size);
+    }
+
+    /**
+     * {@code mesh} from the side, orthographic, over {@code radius} and {@code top}: submeshes from
+     * {@code leaves} to below {@code colored} cut by the atlas's alpha, from {@code colored} on from the palette.
+     */
+    static BufferedImage capture(ProceduralMesh mesh, double radius, double top, BufferedImage atlas,
+        com.truesim.common.procedural.flora.Palette palette, int leaves, int colored, int size) {
         int w = size;
         int h = size;
         float[] depth = new float[w * h];
@@ -189,7 +222,8 @@ final class Looks {
         Vec2Attribute uv = mesh.vertices().attribute(ProceduralVertex.UV);
         int[] idx = mesh.indices();
         for (int t = 0; t < idx.length; t += 3) {
-            boolean leaf = t >= mesh.submeshStart(1);
+            boolean paletted = t >= mesh.submeshStart(Math.min(colored, mesh.submeshCount()));
+            boolean leaf = !paletted && t >= mesh.submeshStart(Math.min(leaves, mesh.submeshCount()));
             double[] sx = new double[3];
             double[] sy = new double[3];
             double[] sz = new double[3];
@@ -225,7 +259,10 @@ final class Looks {
                     int vb = idx[t + 1];
                     int vc = idx[t + 2];
                     int rgb;
-                    if (leaf) {
+                    if (paletted) {
+                        rgb = palette.albedo(com.truesim.common.procedural.flora.Palette.part(uv.y(va)),
+                            com.truesim.common.procedural.flora.Palette.t(uv.x(va))).toSrgb();
+                    } else if (leaf) {
                         double u = a * uv.x(va) + b * uv.x(vb) + c * uv.x(vc);
                         double v = a * uv.y(va) + b * uv.y(vb) + c * uv.y(vc);
                         int texel = atlas.getRGB((int) Math.clamp(u * atlas.getWidth(), 0, atlas.getWidth() - 1),
