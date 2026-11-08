@@ -48,7 +48,8 @@ for (int i = 0; i < 1000; i++) forest.add(generator.generate(species(i), Seeds.d
 # game://forest/spruce-a.tree
 generator = tree
 preset = spruce               # a TreeSpecies preset: spruce fir larch pine beech birch rowan apple hazel mugo
-                              # elder dogrose alpenrose blueberry lingonberry
+                              # elder dog-rose alpenrose blueberry lingonberry stone-pine oak ash
+                              # alder green-alder willow
 seed = 42
 season = summer               # spring summer autumn winter
 day = 200                     # or a day of the year (0 to 365): flowers and fruits

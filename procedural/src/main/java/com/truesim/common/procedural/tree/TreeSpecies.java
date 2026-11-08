@@ -231,7 +231,7 @@ public record TreeSpecies(String name, Growth growth, double height, double heig
      * Dog rose (Rosa canina): arching canes, pale pink five-petalled flowers with yellow stamens in June, and oval
      * scarlet hips that hang on through the winter.
      */
-    public static final TreeSpecies DOG_ROSE = new TreeSpecies("dogrose", Growth.SPACE_COLONIZATION, 2.2, 0.2, 6,
+    public static final TreeSpecies DOG_ROSE = new TreeSpecies("dog-rose", Growth.SPACE_COLONIZATION, 2.2, 0.2, 6,
         0.35, 30, 0.02, 4, 0.025, 0.1, 2.2, 0.25, 0.2, List.of(),
         new Crown(Crown.Shape.HEMISPHERE, 0.6, 900, 0.14, 10, 2, -0.15, 80),
         atlas2x2(Kind.LEAF_CLUSTER, 0.2, 0.16, 0.15, 1, 0.6, 0.7, true), 0.15, 0.4, 0.2,
@@ -301,9 +301,94 @@ public record TreeSpecies(String name, Growth growth, double height, double heig
                 .with(Part.FRUIT, new Ramp(a(0.35, 0.4, 0.25), a(0.5, 0.25, 0.12), a(0.4, 0.03, 0.03)))
                 .with(Part.FRUIT_ALT, new Ramp(a(0.35, 0.4, 0.25), a(0.5, 0.25, 0.12), a(0.4, 0.03, 0.03)))));
 
+
+    /**
+     * Pedunculate oak (Quercus robur): a broad, rugged crown of the valley floor; acorns on long stalks, green in
+     * summer, brown and falling in October.
+     */
+    public static final TreeSpecies OAK = new TreeSpecies("oak", Growth.SPACE_COLONIZATION, 22, 0.15, 1, 0, 0, 0.012,
+        1.5, 0.5, 0.35, 2.2, 0.25, 0.4, List.of(),
+        new Crown(Crown.Shape.ELLIPSOID, 0.45, 2400, 0.42, 11, 2.2, 0.0, 110),
+        atlas2x2(Kind.LEAF_CLUSTER, 0.55, 0.45, 0.33, 1, 0.6, 0.7, true), 0.7, 0.8, 0.1,
+        new Fruiting(Placement.ALONG, 2, 1.0, 0.4, 0.2,
+            new Inflorescence(Arrangement.CLUSTER, 1, 3, 0.4, 0.03, 0.008, 0, 0, 0.3, 1), null,
+            new FruitShape(FruitShape.Form.BERRY, 0.008, 1.4, 0.15, 0, 0, 0, 0.7),
+            new Phenology(0, 125, 140, 10, 255, 275, 20, 280, 310), 0.7, 0,
+            Palette.DEFAULT.with(Part.CONE, new Ramp(a(0.2, 0.12, 0.06), a(0.14, 0.18, 0.05), a(0.22, 0.13, 0.06)))));
+
+    /**
+     * Ash (Fraxinus excelsior): a tall, open, egg-shaped crown; bunches of winged seeds hanging, green in summer, brown
+     * through the winter.
+     */
+    public static final TreeSpecies ASH = new TreeSpecies("ash", Growth.SPACE_COLONIZATION, 25, 0.15, 1, 0, 0, 0.012,
+        1.2, 0.42, 0.3, 2.2, 0.35, 0.4, List.of(),
+        new Crown(Crown.Shape.OVOID, 0.3, 1900, 0.42, 11, 2.2, 0.1, 110),
+        atlas2x2(Kind.LEAF_CLUSTER, 0.5, 0.4, 0.35, 1, 0.55, 0.8, true), 0.6, 0.8, 0.1,
+        new Fruiting(Placement.TIPS, 1, 0.35, 0, 0.4,
+            new Inflorescence(Arrangement.CLUSTER, 8, 14, 0.6, 0.04, 0.03, 0, 0, 0.8, 1), null,
+            new FruitShape(FruitShape.Form.BERRY, 0.0035, 3.5, 0.1, 0, 0, 0, 1),
+            new Phenology(0, 110, 125, 10, 250, 280, 30, 330, 480), 1, 0,
+            Palette.DEFAULT.with(Part.CONE, new Ramp(a(0.14, 0.18, 0.06), a(0.16, 0.18, 0.07), a(0.25, 0.17, 0.08)))));
+
+    /**
+     * Black alder (Alnus glutinosa): a narrow, conical tree of stream banks; small woody cones in clusters, green in
+     * summer, black-brown and kept through the winter.
+     */
+    public static final TreeSpecies ALDER = new TreeSpecies("alder", Growth.SPACE_COLONIZATION, 18, 0.15, 1, 0, 0,
+        0.012, 1.2, 0.3, 0.3, 2.2, 0.2, 0.35, List.of(),
+        new Crown(Crown.Shape.OVOID, 0.24, 1600, 0.36, 10, 2, 0.15, 100),
+        atlas2x2(Kind.LEAF_CLUSTER, 0.42, 0.36, 0.3, 1, 0.6, 0.8, true), 0.45, 0.6, 0.12,
+        new Fruiting(Placement.TIPS, 1, 0.4, 0, 0.3,
+            new Inflorescence(Arrangement.CLUSTER, 3, 5, 0.5, 0.01, 0.012, 0, 0, 0.5, 1), null,
+            new FruitShape(FruitShape.Form.CONE, 0.007, 1.4, 0.1, 0, 6, 0, 0.5),
+            new Phenology(0, 60, 90, 25, 260, 290, 30, 400, 600), 1, 0,
+            Palette.DEFAULT.with(Part.CONE, new Ramp(a(0.2, 0.1, 0.08), a(0.12, 0.15, 0.05), a(0.07, 0.05, 0.035)))));
+
+    /**
+     * Green alder (Alnus alnobetula): the shrub of avalanche tracks and wet slopes above the forest, many springy stems;
+     * small cones like the black alder's.
+     */
+    public static final TreeSpecies GREEN_ALDER = new TreeSpecies("green-alder", Growth.SPACE_COLONIZATION, 2.5, 0.2,
+        7, 0.5, 40, 0.02, 5, 0.04, 0.1, 2.2, 0.2, 0.15, List.of(),
+        new Crown(Crown.Shape.HEMISPHERE, 0.75, 1000, 0.12, 10, 2, 0.0, 80),
+        atlas2x2(Kind.LEAF_CLUSTER, 0.22, 0.2, 0.14, 1, 0.6, 0.8, true), 0.15, 0.4, 0.35,
+        new Fruiting(Placement.TIPS, 1, 0.35, 0, 0.2,
+            new Inflorescence(Arrangement.CLUSTER, 2, 4, 0.5, 0.01, 0.01, 0, 0, 0.5, 1), null,
+            new FruitShape(FruitShape.Form.CONE, 0.006, 1.5, 0.1, 0, 6, 0, 0.5),
+            new Phenology(0, 140, 165, 20, 260, 290, 30, 400, 600), 1, 0,
+            Palette.DEFAULT.with(Part.CONE, new Ramp(a(0.2, 0.1, 0.08), a(0.12, 0.15, 0.05), a(0.08, 0.06, 0.04)))));
+
+    /**
+     * Willow (Salix, after the riverbank willows S. eleagnos and S. purpurea): a shrub of many straight wands and narrow
+     * leaves; silvery-yellow catkins in April before the leaves, then capsules opening to white wool in June.
+     */
+    public static final TreeSpecies WILLOW = new TreeSpecies("willow", Growth.SPACE_COLONIZATION, 4, 0.2, 8, 0.5, 18,
+        0.02, 3, 0.06, 0.1, 2.2, 0.15, 0.25, List.of(),
+        new Crown(Crown.Shape.OVOID, 0.35, 1000, 0.18, 10, 2, 0.35, 90),
+        atlas2x2(Kind.LEAF_CLUSTER, 0.26, 0.14, 0.16, 1, 0.7, 0.9, true), 0.2, 0.5, 0.2,
+        new Fruiting(Placement.ALONG, 1, 4, 0.7, 0.2,
+            Inflorescence.solitary(0.003, 0.6, 0, 0), null,
+            new FruitShape(FruitShape.Form.SPIKE, 0.006, 4, 0.15, 0, 9, 0, 0),
+            new Phenology(0, 80, 110, 20, 140, 155, 10, 160, 180), 1, 0,
+            Palette.DEFAULT.with(Part.CONE, new Ramp(a(0.62, 0.56, 0.3), a(0.2, 0.24, 0.1), a(0.62, 0.62, 0.56)))));
+
+    /**
+     * Stone pine (Pinus cembra): the Arolla pine of the treeline, a dense column of soft needles down to the ground;
+     * upright violet cones high in the crown, ripening brown in their second autumn.
+     */
+    public static final TreeSpecies STONE_PINE = new TreeSpecies("stone-pine", Growth.PARAMETRIC, 16, 0.15, 1, 0, 0,
+        0.012, 1.4, 0.36, 0.35, 2.3, 0.08, 0.4,
+        List.of(
+            new Branching(0.08, 0.97, 0.45, 5, 40, 72, 10, 0.2, 0.2, Shape.TAPERED_CYLINDRICAL, 30, 8, 0.05, 0, 0.45),
+            new Branching(0.15, 0.95, 0.3, 2, 90, 45, 10, 0.42, 0.2, Shape.CONICAL, 25, 10, 0.05, 0, 0.25)),
+        null, atlas2x2(Kind.NEEDLE_TUFT, 0.3, 0.26, 0.13, 1, 0.6, 0.2, false), 0.5, 0.8, 0.15,
+        cones(Placement.TIPS, 2, 0.04, 0, 0.6, 1.3, 0.025, 1.4, 10, 0, new Phenology(0, 150, 170, 10, 270, 300, 30,
+            330, 400), new Ramp(a(0.25, 0.1, 0.25), a(0.2, 0.12, 0.18), a(0.22, 0.12, 0.06))));
+
     /** Every preset: trees, then shrubs. */
-    public static final List<TreeSpecies> PRESETS = List.of(SPRUCE, FIR, LARCH, PINE, BEECH, BIRCH, ROWAN, APPLE,
-        HAZEL, MUGO, ELDER, DOG_ROSE, ALPENROSE, BLUEBERRY, LINGONBERRY);
+    public static final List<TreeSpecies> PRESETS = List.of(SPRUCE, FIR, LARCH, PINE, STONE_PINE, BEECH, OAK, ASH,
+        BIRCH, ALDER, ROWAN, APPLE, HAZEL, MUGO, GREEN_ALDER, WILLOW, ELDER, DOG_ROSE, ALPENROSE, BLUEBERRY,
+        LINGONBERRY);
 
     private static Albedo a(double r, double g, double b) {
         return new Albedo(r, g, b);

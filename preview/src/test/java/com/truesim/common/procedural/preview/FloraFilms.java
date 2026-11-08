@@ -93,7 +93,12 @@ class FloraFilms {
 
     private static String title(String name) {
         return switch (name) {
-            case "dogrose" -> "Dog rose";
+            case "dog-rose" -> "Dog rose";
+            case "alpine-aster" -> "Alpine aster";
+            case "green-alder" -> "Green alder";
+            case "stone-pine" -> "Stone pine";
+            case "cotton-grass" -> "Cotton grass";
+            case "marsh-marigold" -> "Marsh marigold";
             default -> Character.toUpperCase(name.charAt(0)) + name.substring(1);
         };
     }
@@ -103,7 +108,9 @@ class FloraFilms {
     void treeTurntables() throws IOException {
         String only = System.getenv("TRUESIM_FLORA_ONLY");
         for (TreeSpecies species : List.of(TreeSpecies.ROWAN, TreeSpecies.APPLE, TreeSpecies.ELDER,
-            TreeSpecies.DOG_ROSE, TreeSpecies.ALPENROSE, TreeSpecies.BLUEBERRY, TreeSpecies.LINGONBERRY)) {
+            TreeSpecies.DOG_ROSE, TreeSpecies.ALPENROSE, TreeSpecies.BLUEBERRY, TreeSpecies.LINGONBERRY,
+            TreeSpecies.OAK, TreeSpecies.ASH, TreeSpecies.ALDER, TreeSpecies.GREEN_ALDER, TreeSpecies.WILLOW,
+            TreeSpecies.STONE_PINE)) {
             if (only != null && !only.contains(species.name())) {
                 continue;
             }
@@ -345,7 +352,7 @@ class FloraFilms {
         try (Stage stage = new Stage(device, WIDTH * SUPER, HEIGHT * SUPER, 60, 6)) {
             PlantSpecies[] mix = {PlantSpecies.GRASS, PlantSpecies.GRASS, PlantSpecies.GRASS, PlantSpecies.GRASS,
                 PlantSpecies.CLOVER, PlantSpecies.CLOVER, PlantSpecies.BUTTERCUP, PlantSpecies.BUTTERCUP,
-                PlantSpecies.ARNICA, PlantSpecies.ASTER, PlantSpecies.EDELWEISS, PlantSpecies.GENTIAN};
+                PlantSpecies.ARNICA, PlantSpecies.ALPINE_ASTER, PlantSpecies.EDELWEISS, PlantSpecies.GENTIAN};
             List<List<PlacedPlant>> variants = new ArrayList<>();
             for (int s = 0; s < mix.length; s++) {
                 List<PlacedPlant> some = new ArrayList<>();

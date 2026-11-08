@@ -76,7 +76,7 @@ public record PlantSpecies(String name, double height, double heightVariation, d
             .with(Part.CENTRE, Ramp.of(a(0.75, 0.38, 0.03))));
 
     /** Alpine aster (Aster alpinus): a low tuft, violet rays around a yellow disc, July and August. */
-    public static final PlantSpecies ASTER = new PlantSpecies("aster", 0.15, 0.2, 0.03, 1, 3, 0.25, 0.05, 0.0016, 0,
+    public static final PlantSpecies ALPINE_ASTER = new PlantSpecies("alpine-aster", 0.15, 0.2, 0.03, 1, 3, 0.25, 0.05, 0.0016, 0,
         new LeafSpec(5, 8, 0.05, 0.012, Outline.SPATULATE, 0.35, -0.2, 0.2, 1, 0),
         new LeafSpec(2, 3, 0.022, 0.005, Outline.LANCEOLATE, 0.6, 0, 0.2, 1, 0),
         new FlowerShape(Form.COMPOSITE, 28, 0.018, 0.0028, Tip.ROUND, 0.05, 0, 12, 0.006, 0.007, 0.003, 0), null, 0,
@@ -138,9 +138,63 @@ public record PlantSpecies(String name, double height, double heightVariation, d
             .with(Part.FRUIT, new Ramp(a(0.1, 0.16, 0.05), a(0.17, 0.15, 0.09), a(0.4, 0.35, 0.2)))
             .with(Part.FRUIT_ALT, new Ramp(a(0.1, 0.16, 0.05), a(0.17, 0.15, 0.09), a(0.4, 0.35, 0.2))));
 
-    /** Every preset. */
-    public static final List<PlantSpecies> PRESETS = List.of(GENTIAN, ARNICA, ASTER, EDELWEISS, BUTTERCUP, CLOVER,
-        GRASS);
+
+    /** Common sedge (Carex nigra): a tuft of narrow keeled leaves, three-edged culms with dark spikes, May to July. */
+    public static final PlantSpecies SEDGE = new PlantSpecies("sedge", 0.35, 0.25, 0.035, 2, 6, 0.25, 0.15, 0.0012, 0,
+        new LeafSpec(30, 50, 0.3, 0.003, Outline.BLADE, 1.05, -1.3, 0.5, 1, 0),
+        new LeafSpec(1, 1, 0.08, 0.0025, Outline.BLADE, 0.6, -0.4, 0.4, 1, 0),
+        null, new FruitShape(FruitShape.Form.SPIKE, 0.0035, 4, 0.15, 0, 7, 0, 0), 0.1,
+        new Phenology(15, 150, 175, 12, 190, 210, 15, 250, 320), 1, 100, 270, 0.5, true,
+        Palette.DEFAULT
+            .with(Part.BLADE, new Ramp(a(0.06, 0.1, 0.04), a(0.14, 0.15, 0.07), a(0.3, 0.24, 0.13)))
+            .with(Part.FRUIT, new Ramp(a(0.1, 0.13, 0.05), a(0.06, 0.05, 0.04), a(0.15, 0.1, 0.06)))
+            .with(Part.FRUIT_ALT, new Ramp(a(0.1, 0.13, 0.05), a(0.06, 0.05, 0.04), a(0.15, 0.1, 0.06))));
+
+    /**
+     * Cotton grass (Eriophorum angustifolium): grassy leaves in wet hollows, nodding heads that flower inconspicuously in
+     * May and turn to tufts of white cotton in June and July.
+     */
+    public static final PlantSpecies COTTON_GRASS = new PlantSpecies("cotton-grass", 0.4, 0.2, 0.03, 2, 5, 0.2, 0.2,
+        0.0013, 0,
+        new LeafSpec(12, 22, 0.25, 0.004, Outline.BLADE, 1.0, -1.2, 0.5, 1, 0),
+        new LeafSpec(1, 1, 0.08, 0.003, Outline.BLADE, 0.6, -0.4, 0.4, 1, 0),
+        null, new FruitShape(FruitShape.Form.BERRY, 0.014, 1.3, 0.15, 0, 9, 0, 0), 0.6,
+        new Phenology(15, 130, 160, 10, 165, 185, 12, 220, 250), 1, 100, 265, 0.6, true,
+        Palette.DEFAULT
+            .with(Part.FRUIT, new Ramp(a(0.12, 0.16, 0.06), a(0.5, 0.5, 0.45), a(0.78, 0.78, 0.75)))
+            .with(Part.FRUIT_ALT, new Ramp(a(0.12, 0.16, 0.06), a(0.5, 0.5, 0.45), a(0.78, 0.78, 0.75))));
+
+    /**
+     * Soft rush (Juncus effusus): a dense clump of upright, smooth green stems in wet ground, brown flower clusters
+     * from their side in summer.
+     */
+    public static final PlantSpecies RUSH = new PlantSpecies("rush", 0.55, 0.2, 0.05, 3, 6, 0.15, 0.05, 0.0015, 0,
+        new LeafSpec(40, 70, 0.55, 0.003, Outline.BLADE, 1.4, -0.35, 0.9, 1, 0),
+        LeafSpec.NONE,
+        null, new FruitShape(FruitShape.Form.BERRY, 0.009, 1.4, 0.15, 0, 9, 0, 0), 1.0,
+        new Phenology(15, 170, 200, 15, 215, 235, 15, 280, 400), 1, 95, 290, 0.3, true,
+        Palette.DEFAULT
+            .with(Part.BLADE, new Ramp(a(0.07, 0.13, 0.04), a(0.1, 0.14, 0.05), a(0.25, 0.22, 0.12)))
+            .with(Part.FRUIT, new Ramp(a(0.12, 0.13, 0.05), a(0.18, 0.12, 0.06), a(0.2, 0.12, 0.06)))
+            .with(Part.FRUIT_ALT, new Ramp(a(0.12, 0.13, 0.05), a(0.18, 0.12, 0.06), a(0.2, 0.12, 0.06))));
+
+    /**
+     * Marsh marigold (Caltha palustris): round, glossy leaves on long stalks and branched stems of large golden cups,
+     * April to June, by springs and streams.
+     */
+    public static final PlantSpecies MARSH_MARIGOLD = new PlantSpecies("marsh-marigold", 0.25, 0.2, 0.06, 2, 4, 0.3,
+        0.1, 0.0028, 2,
+        new LeafSpec(5, 8, 0.07, 0.07, Outline.ELLIPTIC, 0.5, -0.25, 0.25, 1, 0.12),
+        new LeafSpec(1, 2, 0.045, 0.045, Outline.ELLIPTIC, 0.4, -0.2, 0.2, 1, 0.02),
+        new FlowerShape(Form.SIMPLE, 5, 0.016, 0.015, Tip.ROUND, 0.35, 0, 0, 0.005, 0.005, 0.002, 0), null, 0,
+        new Phenology(12, 110, 160, 22, 175, 185, 10, 190, 210), 0, 95, 250, 0.4, false,
+        Palette.DEFAULT
+            .with(Part.PETAL, new Ramp(a(0.4, 0.38, 0.05), a(0.8, 0.6, 0.03), a(0.6, 0.48, 0.1)))
+            .with(Part.CENTRE, Ramp.of(a(0.72, 0.56, 0.04))));
+
+    /** Every preset: meadow flowers, grass, then plants of wet ground. */
+    public static final List<PlantSpecies> PRESETS = List.of(GENTIAN, ARNICA, ALPINE_ASTER, EDELWEISS, BUTTERCUP,
+        CLOVER, GRASS, SEDGE, COTTON_GRASS, RUSH, MARSH_MARIGOLD);
 
     private static Albedo a(double r, double g, double b) {
         return new Albedo(r, g, b);

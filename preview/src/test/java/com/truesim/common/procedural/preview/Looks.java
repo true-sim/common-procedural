@@ -41,10 +41,15 @@ final class Looks {
             case "rowan" -> new int[] {0x8cc052, 0x4f7f2e, 0xc2582a, 0x4f7f2e};
             case "apple" -> new int[] {0x92c25a, 0x4c7a2e, 0xb59a3a, 0x4c7a2e};
             case "elder" -> new int[] {0x86b84c, 0x46742a, 0x9a8a3a, 0x46742a};
-            case "dogrose" -> new int[] {0x86b450, 0x4a7430, 0xb0602e, 0x4a7430};
+            case "dog-rose" -> new int[] {0x86b450, 0x4a7430, 0xb0602e, 0x4a7430};
             case "alpenrose" -> new int[] {0x3e6a2c, 0x2c5222, 0x2c5222, 0x2a4a22};
             case "blueberry" -> new int[] {0x8cc456, 0x52862e, 0xb8402c, 0x52862e};
             case "lingonberry" -> new int[] {0x4a7a32, 0x2e5a24, 0x2e5a24, 0x3a4a24};
+            case "oak" -> new int[] {0x8cb84e, 0x3e6a24, 0xa8702c, 0x3e6a24};
+            case "ash" -> new int[] {0x96c45a, 0x4a7a2c, 0x9aa040, 0x4a7a2c};
+            case "alder", "green-alder" -> new int[] {0x6a9a3e, 0x2e5420, 0x3e5a24, 0x2e5420};
+            case "willow" -> new int[] {0xa0c070, 0x7a9a5a, 0xb8a040, 0x7a9a5a};
+            case "stone-pine" -> new int[] {0x3e6a3a, 0x2a4a2c, 0x2a4a2c, 0x26422a};
             default -> new int[] {0x86b84a, 0x4f7f2b, 0xc79a35, 0x4f7f2b};
         };
     }
@@ -141,7 +146,12 @@ final class Looks {
             case "rowan" -> 0x8a8278;
             case "apple" -> 0x7a6656;
             case "elder" -> 0x9a8c74;
-            case "dogrose" -> 0x6a7040;
+            case "dog-rose" -> 0x6a7040;
+            case "oak" -> 0x6a6258;
+            case "ash" -> 0x8a8a80;
+            case "alder", "green-alder" -> 0x5a5048;
+            case "willow" -> 0x7a6a50;
+            case "stone-pine" -> 0x7a6050;
             case "blueberry" -> 0x4f7a34;
             case "alpenrose", "lingonberry" -> 0x6a5040;
             default -> 0x6b5545;

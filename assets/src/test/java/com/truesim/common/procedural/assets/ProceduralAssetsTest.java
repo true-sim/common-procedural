@@ -236,7 +236,7 @@ class ProceduralAssetsTest {
 
     @Test
     void badRecipesAndFragmentsFail() throws Exception {
-        Files.writeString(game.resolve("forest/oak.tree"), "generator = tree\npreset = oak\n");
+        Files.writeString(game.resolve("forest/oak.tree"), "generator = tree\npreset = baobab\n");
         AssetRef<MeshData> oak = paths.ref(RenderAssets.MESH, "game://forest/oak.tree");
         assertThat(load(oak)).isNull();
         assertThat(cache.state(oak)).isEqualTo(AssetState.FAILED);
