@@ -40,6 +40,27 @@ class ProceduralAssetsTest {
         season = summer
         material.bark = game://materials/bark.material
         material.leaves = game://materials/needles.material
+        material.attachments = game://materials/cones.material
+        """;
+
+    private static final String ROWAN = """
+        # a rowan in fruit
+        generator = tree
+        preset = rowan
+        seed = 5
+        day = 250
+        material.bark = game://materials/bark.material
+        material.leaves = game://materials/rowan-leaves.material
+        material.attachments = game://materials/rowan-berries.material
+        """;
+
+    private static final String GENTIAN = """
+        generator = plant
+        preset = gentian
+        seed = 8
+        day = 150
+        material.foliage = game://materials/plant.material
+        material.flowers = game://materials/flowers.material
         """;
 
     @TempDir
@@ -57,6 +78,8 @@ class ProceduralAssetsTest {
         game = Files.createDirectories(dir.resolve("game"));
         Files.createDirectories(game.resolve("forest"));
         Files.writeString(game.resolve("forest/spruce.tree"), SPRUCE);
+        Files.writeString(game.resolve("forest/rowan.tree"), ROWAN);
+        Files.writeString(game.resolve("forest/gentian.plant"), GENTIAN);
         Files.writeString(game.resolve("forest/stone.rock"), "generator = rock\npreset = block\nseed = 3\n");
         tasks = new TaskScheduler();
         cache = new AssetCache(tasks);
@@ -105,7 +128,7 @@ class ProceduralAssetsTest {
             assertSameMesh(loaded, expected);
         }
         assertThat(loaded.format()).isEqualTo(SceneMeshes.FORMAT);
-        assertThat(loaded.materialSlots()).isEqualTo(2);
+        assertThat(loaded.materialSlots()).isEqualTo(3); // bark, needles, cones
         // the other levels and the billboard by fragment
         MeshData far = load(paths.ref(RenderAssets.MESH, "game://forest/spruce.tree#lod/2"));
         assertThat(far.triangleCount()).isEqualTo(direct.lods().get(2).triangleCount());
@@ -117,7 +140,8 @@ class ProceduralAssetsTest {
         assertThat(node.mesh()).isEqualTo(paths.ref(RenderAssets.MESH, "game://forest/spruce.tree#lod/0"));
         assertThat(node.materials()).containsExactly(
             paths.ref(RenderAssets.MATERIAL, "game://materials/bark.material"),
-            paths.ref(RenderAssets.MATERIAL, "game://materials/needles.material"));
+            paths.ref(RenderAssets.MATERIAL, "game://materials/needles.material"),
+            paths.ref(RenderAssets.MATERIAL, "game://materials/cones.material"));
         // the recipe itself, and a rock
         assertThat(load(paths.ref(ProceduralAssets.RECIPE, "game://forest/spruce.tree")).seed()).isEqualTo(42);
         MeshData stone = load(paths.ref(RenderAssets.MESH, "game://forest/stone.rock#lod/1"));
@@ -190,16 +214,18 @@ class ProceduralAssetsTest {
 
     @Test
     void recipesMadeInCodeAreGeneratedAssets() throws Exception {
-        Recipe winter = new Recipe("tree", "larch", 4, Season.WINTER, 0.5,
-            List.of("game://materials/larch-bark.material", "game://materials/larch.material"));
+        List<String> materials = List.of("game://materials/larch-bark.material", "game://materials/larch.material",
+            "game://materials/larch-cones.material");
+        Recipe winter = new Recipe("tree", "larch", 4, Season.WINTER, 0.5, materials);
         AssetRef<ModelData> model = procedural.model(winter);
         assertThat(model).isEqualTo(procedural.model(new Recipe("tree", "larch", 4, Season.WINTER, 0.5,
-            List.of("game://materials/larch-bark.material", "game://materials/larch.material"))));
+            materials)));
         ModelData data = load(model);
-        // bare in winter: the leaves' submesh and its material are left out
-        assertThat(data.nodes().getFirst().materials()).hasSize(1);
+        // bare in winter (its cones kept): the leaves' submesh and its material are left out
+        assertThat(data.nodes().getFirst().materials()).containsExactly(
+            paths.ref(RenderAssets.MATERIAL, materials.get(0)), paths.ref(RenderAssets.MATERIAL, materials.get(2)));
         MeshData mesh = load(data.nodes().getFirst().mesh());
-        assertThat(mesh.materialSlots()).isEqualTo(1);
+        assertThat(mesh.materialSlots()).isEqualTo(2);
         Tree direct = Trees.generate(TreeSpecies.LARCH, TreeOptions.DEFAULTS.withSeason(Season.WINTER)
             .withSnowLoad(0.5), 4);
         assertThat(mesh.triangleCount()).isEqualTo(direct.lods().getFirst().triangleCount());
@@ -230,7 +256,17 @@ class ProceduralAssetsTest {
     void recipesParse() {
         Recipe recipe = Recipe.parse(SPRUCE);
         assertThat(recipe).isEqualTo(new Recipe("tree", "spruce", 42, Season.SUMMER, 0,
-            List.of("game://materials/bark.material", "game://materials/needles.material")));
+            List.of("game://materials/bark.material", "game://materials/needles.material",
+                "game://materials/cones.material")));
+        Recipe day = Recipe.parse("generator = plant\npreset = clover\nday = 200.5\nmaterial.flowers = f://x");
+        assertThat(day.day()).isEqualTo(200.5);
+        assertThat(day.dayOfYear()).isEqualTo(200.5);
+        assertThat(day.materials()).containsExactly("", "f://x");
+        assertThat(Recipe.parse(SPRUCE).dayOfYear()).isEqualTo(Season.SUMMER.day());
+        assertThat(day.generationKey()).contains("day=");
+        assertThat(Recipe.parse(SPRUCE).generationKey()).doesNotContain("day=");
+        assertThatThrownBy(() -> Recipe.parse("generator = tree\npreset = rowan\nday = 400"))
+            .isInstanceOf(IllegalArgumentException.class);
         assertThat(Recipe.parse("generator=rock\npreset=slab\nseed=-7\nmaterial.rock = a://b\n").materials())
             .containsExactly("a://b");
         assertThat(Recipe.parse("generator = tree\npreset = larch\nseason = Autumn\nsnow = 0.25").snow())
@@ -291,5 +327,58 @@ class ProceduralAssetsTest {
         assertThat(failures).hasSize(1);
         assertThat(live.recipe().seed()).isEqualTo(43);
         assertThatThrownBy(() -> procedural.live("game://forest/none.tree")).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test
+    void floweringAndFruitingRecipesLoadTheSameAsTheDirectApi() throws Exception {
+        // a tree on its day: the rowan in fruit, berries in its third submesh
+        MeshData rowan = load(paths.ref(RenderAssets.MESH, "game://forest/rowan.tree"));
+        Tree direct = Trees.generate(TreeSpecies.ROWAN, TreeOptions.DEFAULTS.withDay(250), 5);
+        assertThat(direct.flora().fruits()).isPositive();
+        try (MeshData expected = SceneMeshes.build(direct.lods().getFirst())) {
+            assertSameMesh(rowan, expected);
+        }
+        assertThat(rowan.materialSlots()).isEqualTo(3);
+        MeshData medium = load(paths.ref(RenderAssets.MESH, "game://forest/rowan.tree#lod/1"));
+        try (MeshData expected = SceneMeshes.build(direct.lods().get(1))) {
+            assertSameMesh(medium, expected);
+        }
+        // a plant: its levels and billboard, the same as the direct API's
+        MeshData gentian = load(paths.ref(RenderAssets.MESH, "game://forest/gentian.plant"));
+        com.truesim.common.procedural.plant.Plant plant = com.truesim.common.procedural.plant.Plants.generate(
+            com.truesim.common.procedural.plant.PlantSpecies.GENTIAN,
+            com.truesim.common.procedural.plant.PlantOptions.DEFAULTS.withDay(150), 8);
+        try (MeshData expected = SceneMeshes.build(plant.lods().getFirst())) {
+            assertSameMesh(gentian, expected);
+        }
+        MeshData card = load(paths.ref(RenderAssets.MESH, "game://forest/gentian.plant#billboard"));
+        assertThat(card.triangleCount()).isEqualTo(6);
+        ModelData model = load(paths.ref(RenderAssets.MODEL, "game://forest/gentian.plant"));
+        assertThat(model.nodes().getFirst().materials()).hasSize(gentian.materialSlots());
+        // the palette: the species' colors as a texture
+        com.truesim.scene.render.TextureData palette = load(paths.ref(RenderAssets.TEXTURE,
+            "game://forest/rowan.tree#palette"));
+        byte[] expected = TreeSpecies.ROWAN.fruiting().palette().texels();
+        assertThat(palette.width()).isEqualTo(com.truesim.common.procedural.flora.Palette.WIDTH);
+        assertThat(bytes(palette.texels())).isEqualTo(expected);
+        assertThat(palette.colorSpace()).isEqualTo(com.truesim.scene.render.TextureData.ColorSpace.SRGB);
+        assertThat(load(paths.ref(RenderAssets.TEXTURE, "game://forest/gentian.plant#palette"))).isNotNull();
+        assertThat(procedural.palette(Recipe.parse(SPRUCE)).height()).isEqualTo(palette.height());
+        AssetRef<com.truesim.scene.render.TextureData> none = paths.ref(RenderAssets.TEXTURE,
+            "game://forest/stone.rock#palette");
+        load(none);
+        assertThat(cache.state(none)).isEqualTo(AssetState.FAILED);
+        AssetRef<com.truesim.scene.render.TextureData> odd = paths.ref(RenderAssets.TEXTURE,
+            "game://forest/rowan.tree#bark");
+        load(odd);
+        assertThat(cache.state(odd)).isEqualTo(AssetState.FAILED);
+        assertThat(ProceduralGenerator.TREES.palette(Recipe.parse("generator = tree\npreset = beech")))
+            .isSameAs(com.truesim.common.procedural.flora.Palette.DEFAULT);
+        assertThatThrownBy(() -> ProceduralGenerator.PLANTS.generate(Recipe.parse("generator = plant\npreset = x")))
+            .isInstanceOf(IllegalArgumentException.class);
+        // generated once each, cached by recipe and version
+        int generations = generated.generations();
+        load(paths.ref(RenderAssets.MESH, "game://forest/gentian.plant#lod/2"));
+        assertThat(generated.generations()).isEqualTo(generations);
     }
 }

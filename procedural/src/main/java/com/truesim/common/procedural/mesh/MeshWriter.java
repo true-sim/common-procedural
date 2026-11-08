@@ -68,6 +68,31 @@ public final class MeshWriter {
         this.leaf = (float) leaf;
     }
 
+    /** Sets the leaf weight only. */
+    public void leafWeight(double leaf) {
+        this.leaf = (float) leaf;
+    }
+
+    /** Sets the branch weight only. */
+    public void branchWeight(double branch) {
+        this.branch = (float) branch;
+    }
+
+    /** The branch weight of the vertices added next. */
+    public double branchWeight() {
+        return branch;
+    }
+
+    /** The leaf weight of the vertices added next. */
+    public double leafWeight() {
+        return leaf;
+    }
+
+    /** The submesh the triangles added next belong to. */
+    public int submesh() {
+        return submeshCount;
+    }
+
     /** Adds a vertex and returns its index. Normals and tangents are expected unit length. */
     @AllowAllocation("growing, until warm")
     public int vertex(double px, double py, double pz, double nx, double ny, double nz, double tx, double ty,

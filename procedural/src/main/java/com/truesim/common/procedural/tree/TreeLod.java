@@ -2,8 +2,9 @@ package com.truesim.common.procedural.tree;
 
 /**
  * How one level of detail of a tree is meshed: the simplifications that carry trees well (fewer sides per branch,
- * fewer rings, thin branches left to the leaves, fewer but larger leaf cards), and the triangle budget the level must
- * keep. Over budget, the level drops more leaf cards and branches until it fits.
+ * fewer rings, thin branches left to the leaves, fewer but larger leaf cards, simpler flowers and fruits), and the
+ * triangle budget the level must keep. Over budget, the level simplifies its flowers and fruits and drops more leaf
+ * cards and branches until it fits.
  *
  * @param trunkSides sides around a trunk
  * @param branchSides sides around a main branch (level 1)
@@ -11,25 +12,36 @@ package com.truesim.common.procedural.tree;
  * @param minRadius branches thinner than this at their base, metres, are not meshed
  * @param ringStride a ring at every this many nodes along a branch (the first and last always; one more for twigs)
  * @param leafKeep keep one leaf card in this many, the kept ones scaled up to cover as much
- * @param triangleBudget the most triangles the level may have
+ * @param triangleBudget the most triangles the level may have, flowers and fruits included
+ * @param attachmentDetail flowers, fruits and cones: 0 full (petals, sepals, stalks), 1 simplified (no sepals or
+ *     pedicels, fewer segments), 2 merged (a head of many as one shape), 3 none
  */
 public record TreeLod(int trunkSides, int branchSides, int twigSides, double minRadius, int ringStride, int leafKeep,
-    int triangleBudget) {
+    int triangleBudget, int attachmentDetail) {
+
+    /** The most simplified attachments: none. */
+    public static final int NO_ATTACHMENTS = 3;
 
     public TreeLod {
         if (trunkSides < 3 || branchSides < 3 || twigSides < 3 || ringStride < 1 || leafKeep < 1
-            || triangleBudget < 1) {
+            || triangleBudget < 1 || attachmentDetail < 0 || attachmentDetail > NO_ATTACHMENTS) {
             throw new IllegalArgumentException("Not a level of detail: " + trunkSides + ", " + branchSides + ", "
-                + twigSides + ", " + ringStride + ", " + leafKeep + ", " + triangleBudget);
+                + twigSides + ", " + ringStride + ", " + leafKeep + ", " + triangleBudget + ", " + attachmentDetail);
         }
     }
 
+    /** A level with full flowers and fruits. */
+    public TreeLod(int trunkSides, int branchSides, int twigSides, double minRadius, int ringStride, int leafKeep,
+        int triangleBudget) {
+        this(trunkSides, branchSides, twigSides, minRadius, ringStride, leafKeep, triangleBudget, 0);
+    }
+
     /** Full detail. */
-    public static final TreeLod FULL = new TreeLod(10, 6, 3, 0.008, 1, 1, 90_000);
-    /** Half distance: thin twigs left to the leaves, half the cards. */
-    public static final TreeLod MEDIUM = new TreeLod(7, 4, 3, 0.025, 2, 2, 25_000);
-    /** Far: main branches only, a sixth of the cards. */
-    public static final TreeLod LOW = new TreeLod(5, 3, 3, 0.07, 3, 6, 8_000);
+    public static final TreeLod FULL = new TreeLod(10, 6, 3, 0.008, 1, 1, 90_000, 0);
+    /** Half distance: thin twigs left to the leaves, half the cards, simpler flowers and fruits. */
+    public static final TreeLod MEDIUM = new TreeLod(7, 4, 3, 0.025, 2, 2, 25_000, 1);
+    /** Far: main branches only, a sixth of the cards, heads of flowers or fruit merged. */
+    public static final TreeLod LOW = new TreeLod(5, 3, 3, 0.07, 3, 6, 8_000, 2);
 
     /** Sides around a branch of {@code level}. */
     public int sides(int level) {

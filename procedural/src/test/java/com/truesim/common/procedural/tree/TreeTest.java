@@ -116,7 +116,7 @@ class TreeTest {
         for (int l = 0; l < lods.size(); l++) {
             ProceduralMesh mesh = lods.get(l);
             assertThat(mesh.triangleCount()).isLessThanOrEqualTo(options.lods().get(l).triangleBudget());
-            assertThat(mesh.submeshCount()).isEqualTo(2);
+            assertThat(mesh.submeshCount()).isEqualTo(3);
             if (l > 0) {
                 assertThat(mesh.triangleCount()).isLessThan(lods.get(l - 1).triangleCount());
                 assertThat(mesh.error()).isGreaterThanOrEqualTo(lods.get(l - 1).error());
@@ -125,7 +125,8 @@ class TreeTest {
         assertThat(tree.billboard().triangleCount()).isEqualTo(6);
         assertThat(tree.billboard().error()).isGreaterThan(0);
         // the far level is a small fraction of the near one
-        assertThat(lods.getLast().triangleCount()).isLessThan(lods.getFirst().triangleCount() / 4);
+        // (dwarf shrubs are cheap at every level)
+        assertThat(lods.getLast().triangleCount()).isLessThan(Math.max(lods.getFirst().triangleCount() / 4, 2000));
     }
 
     @Test
@@ -149,6 +150,10 @@ class TreeTest {
         for (int i = mesh.submeshStart(Tree.LEAVES); i < mesh.submeshEnd(Tree.LEAVES); i++) {
             leafVertex[mesh.indices()[i]] = true;
         }
+        boolean[] attached = new boolean[mesh.vertexCount()]; // flowers and fruits: AttachmentTest
+        for (int i = mesh.submeshStart(Tree.ATTACHMENTS); i < mesh.submeshEnd(Tree.ATTACHMENTS); i++) {
+            attached[mesh.indices()[i]] = true;
+        }
         int trunkVertices = 0;
         int branchVertices = 0;
         double flutter = species.foliage().flutter();
@@ -167,12 +172,20 @@ class TreeTest {
                 assertThat(leaf).isLessThanOrEqualTo(flutter + 1 / 30.0);
                 continue;
             }
+            if (attached[i]) {
+                continue;
+            }
             assertThat(leaf).isZero(); // wood does not flutter
             if (pivot.x(i) == 0 && branch == 0) {
                 // the trunk: (h / height)^1.5 of its stem, its reach the stem's height
                 trunkVertices++;
                 double h = Math.clamp(position.y(i) / pivot.y(i), 0, 1);
-                assertThat(trunk).isCloseTo(h * Math.sqrt(h), within(0.03 + 0.05 * species.rootFlare()));
+                // a ring's vertices sit a radius off the axis: on a leaning stem, a height of their own
+                double off = 3 * species.baseRadius() * (1 + species.rootFlare()) / pivot.y(i);
+                double lo = Math.clamp(h - off, 0, 1);
+                double hi = Math.clamp(h + off, 0, 1);
+                assertThat(trunk).isBetween(lo * Math.sqrt(lo) - 0.03 - 0.05 * species.rootFlare(),
+                    hi * Math.sqrt(hi) + 0.03 + 0.05 * species.rootFlare());
             } else {
                 branchVertices++;
                 assertThat(pivot.x(i)).isGreaterThan(0);
