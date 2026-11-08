@@ -34,7 +34,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * preview's minimal material reading the wind format (proceduralTree.slang). Run with
  * {@code TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-vegetation :preview:test};
  * encode each with {@code ffmpeg -framerate 30 -i <film>/f%04d.png -c:v libx264 -pix_fmt yuv420p -crf 20 <film>.mp4}.
- * {@code TRUESIM_SCREENSHOTS=true} draws one still of every species only (quick, e.g. under GPU-assisted validation).
+ * {@code TRUESIM_SCREENSHOTS=true} draws one still of every species only, on a validated device (quick; with
+ * {@code TRUESIM_GPU_ASSISTED_VALIDATION=true} GPU-assisted validation checks the shaders' reads and writes).
  */
 class ProceduralFilms {
 
@@ -123,7 +124,9 @@ class ProceduralFilms {
     @EnabledIfEnvironmentVariable(named = "TRUESIM_SCREENSHOTS", matches = "true")
     void stills() throws IOException {
         Path out = folder("stills");
-        try (Stage stage = new Stage(device, WIDTH * SUPER, HEIGHT * SUPER, 400)) {
+        // Validated (TRUESIM_GPU_ASSISTED_VALIDATION=true adds GPU-assisted validation): closing fails on errors
+        try (com.truesim.engine.vulkan.testing.TestGpu gpu = com.truesim.engine.vulkan.testing.TestGpu.open();
+             Stage stage = new Stage(gpu.device(), WIDTH * SUPER, HEIGHT * SUPER, 400)) {
             List<TreeSpecies> all = TreeSpecies.PRESETS;
             for (int i = 0; i < all.size(); i++) {
                 Placed placed = load(stage, Trees.generate(all.get(i), 1));
@@ -177,7 +180,7 @@ class ProceduralFilms {
             double[] points = new double[2 * 400];
             int count = PoissonDisc.sample(Rng.seeded(3), 110, 110, 7, 30, points);
             Rng rng = Rng.seeded(4);
-            Vec3 camera = new Vec3(0, 3, 40);
+            Vec3 camera = new Vec3(0, 5, 58);
             for (int i = 0; i < count; i++) {
                 double x = points[2 * i] - 55;
                 double z = points[2 * i + 1] - 75;
@@ -192,7 +195,7 @@ class ProceduralFilms {
             }
             Rock boulder = Rocks.generate(RockParams.BOULDER, 2);
             int rockMaterial = stage.plainMaterial(stage.texture(Looks.rock()), 0.85f);
-            int rockMesh = stage.add(boulder.lods().getFirst());
+            int rockMesh = stage.addStill(boulder.lods().getFirst());
             for (int i = 0; i < 6; i++) {
                 stage.place(rockMesh, rockMaterial, -14 + 6 * i, 8 - 5 * (i % 2), i, 0.6 + 0.3 * (i % 3));
             }
@@ -202,8 +205,8 @@ class ProceduralFilms {
                 double t = f / 30.0;
                 double speed = t < 2 ? 0 : t < 6 ? 11 * (t - 2) / 4 : 11 + 2 * Math.sin(t * 1.7);
                 stage.wind(wind(speed));
-                double z = 38 - 0.6 * t;
-                stage.look(1.5 * Math.sin(t * 0.25), 3 + 0.15 * t, z, 0, 9, z - 40, 55);
+                double z = 58 - 0.8 * t;
+                stage.look(3 * Math.sin(t * 0.25), 5 + 0.1 * t, z, 0, 10, 0, 55);
                 stage.frames(f == 0 ? 4 : 1, 1 / 30.0);
                 write(stage.shot(), out, f);
             }

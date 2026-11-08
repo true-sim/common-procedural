@@ -122,6 +122,7 @@ class ProceduralAssetsTest {
         assertThat(load(paths.ref(ProceduralAssets.RECIPE, "game://forest/spruce.tree")).seed()).isEqualTo(42);
         MeshData stone = load(paths.ref(RenderAssets.MESH, "game://forest/stone.rock#lod/1"));
         assertThat(stone.triangleCount()).isEqualTo(20 * 256);
+        assertThat(stone.format()).isEqualTo(SceneMeshes.STILL); // no wind: no vertex color to tint by
         // generated once, for every load of the same recipe
         assertThat(generated.generations()).isEqualTo(2);
     }

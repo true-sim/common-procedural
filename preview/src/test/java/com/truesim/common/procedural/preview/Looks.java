@@ -239,7 +239,7 @@ final class Looks {
                     }
                     double ny = a * normal.y(va) + b * normal.y(vb) + c * normal.y(vc);
                     double nz = a * normal.z(va) + b * normal.z(vb) + c * normal.z(vc);
-                    double light = 0.6 + 0.25 * ny + 0.25 * Math.abs(nz);
+                    double light = 0.95 + 0.2 * ny + 0.15 * Math.abs(nz);
                     depth[y * w + x] = (float) z;
                     color[y * w + x] = 0xff000000 | shade(rgb & 0xffffff, light).getRGB() & 0xffffff;
                 }

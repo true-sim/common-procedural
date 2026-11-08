@@ -184,7 +184,7 @@ public final class ProceduralAssets {
             throw new IllegalArgumentException("A " + recipe.generator() + " has meshes 0 to " + (all.size() - 1)
                 + ", not " + index);
         }
-        return SceneMeshes.build(all.get(index));
+        return SceneMeshes.build(all.get(index), generators.get(recipe.generator()).sways());
     }
 
     /** A model of one node: {@code mesh} with the recipe's materials of the submeshes level 0 has. */

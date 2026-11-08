@@ -29,6 +29,11 @@ public interface ProceduralGenerator {
     /** The meshes of {@code recipe}. */
     List<ProceduralMesh> generate(Recipe recipe) throws Exception;
 
+    /** Whether its meshes sway: carry the wind data into the scene mesh ({@link SceneMeshes#FORMAT}). */
+    default boolean sways() {
+        return true;
+    }
+
     /** Trees ({@link Trees}): the levels of {@link TreeOptions#DEFAULTS}, then the billboard. */
     ProceduralGenerator TREES = new ProceduralGenerator() {
         @Override
@@ -71,6 +76,11 @@ public interface ProceduralGenerator {
         @Override
         public int version() {
             return RockGenerator.VERSION;
+        }
+
+        @Override
+        public boolean sways() {
+            return false;
         }
 
         @Override

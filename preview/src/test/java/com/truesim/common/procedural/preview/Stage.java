@@ -100,9 +100,14 @@ final class Stage implements AutoCloseable {
         lights.setCount(1);
     }
 
-    /** {@code mesh} in the geometry pool. */
+    /** {@code mesh} in the geometry pool, with its wind data. */
     int add(ProceduralMesh mesh) {
         return pool.add(SceneMeshes.build(mesh));
+    }
+
+    /** {@code mesh} in the geometry pool without wind data (rocks: plain materials tint by the vertex color). */
+    int addStill(ProceduralMesh mesh) {
+        return pool.add(SceneMeshes.build(mesh, false));
     }
 
     /** A texture of sRGB colors with alpha. */

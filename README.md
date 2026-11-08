@@ -179,6 +179,9 @@ position has the encoding of a scene mesh attribute, so it maps onto `MeshBuilde
   and the species' flutter (birch 1, needles about 0.2) at its far end. The phase (16 steps) is the main branch's, so a
   branch sways as one; 0 on the trunk.
 - **Alpha** (`COLOR.a`) is always 1: alpha-masked materials multiply their mask by the vertex color's alpha.
+- **Materials** reading the format must not tint by the vertex color (metallic-roughness does: the preview's material
+  and effects-vegetation's plant material set it to white for shading). Meshes that do not sway (rocks) leave UV1 and
+  COLOR out of their scene mesh (`SceneMeshes.STILL`), so plain materials draw them as they are.
 
 Decoding in a material's `displace()` (the preview's `proceduralTree.slang` does this):
 
