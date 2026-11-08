@@ -320,7 +320,7 @@ public final class FloraWriter {
             }
             default -> {
                 around = detail == 0 ? (minute ? 4 : tiny ? 5 : small ? 6 : large ? 10 : 8)
-                    : detail == 1 ? (tiny ? 4 : small ? 4 : large ? 7 : 5) : 3;
+                    : detail == 1 ? (tiny ? 4 : small ? 4 : large ? 7 : 5) : 4;
                 stacks = detail == 0 ? (minute ? 2 : tiny ? 3 : small ? 4 : large ? 7 : 5)
                     : detail == 1 ? (tiny ? 2 : small ? 3 : large ? 5 : 4) : 2;
             }

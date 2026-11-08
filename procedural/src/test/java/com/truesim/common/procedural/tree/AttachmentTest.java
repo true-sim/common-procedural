@@ -207,7 +207,7 @@ class AttachmentTest {
         assertThat(early.albedo().r()).isGreaterThan(2 * early.albedo().g()); // pink buds
         FloraSummary bloom = generator.generate(TreeSpecies.APPLE, TreeOptions.DEFAULTS.withDay(130), 1).flora();
         assertThat(bloom.flowers()).isGreaterThan(bloom.buds());
-        Tree autumn = generator.generate(TreeSpecies.APPLE, TreeOptions.DEFAULTS.withDay(262), 1);
+        Tree autumn = generator.generate(TreeSpecies.APPLE, TreeOptions.DEFAULTS.withDay(256), 1);
         int flowersPerTree = 0;
         Attachments sites = generator.attachments();
         assertThat(sites.count()).isPositive();
@@ -227,7 +227,7 @@ class AttachmentTest {
         // the two cultivars
         Set<Part> parts = new HashSet<>();
         for (long seed = 0; seed < 6; seed++) {
-            parts.addAll(parts(Trees.generate(TreeSpecies.APPLE, TreeOptions.DEFAULTS.withDay(262), seed)
+            parts.addAll(parts(Trees.generate(TreeSpecies.APPLE, TreeOptions.DEFAULTS.withDay(256), seed)
                 .lods().getFirst()));
         }
         assertThat(parts).contains(Part.FRUIT, Part.FRUIT_ALT);
@@ -322,8 +322,9 @@ class AttachmentTest {
         }
         // a tight budget simplifies flowers and fruits before anything else, then drops them
         TreeOptions options = bloom(species);
-        int full = attachmentTriangles(Trees.generate(species, options, 4).lods().getFirst());
-        int wood = Trees.generate(species, options.withLods(List.of(new TreeLod(10, 6, 3, 0.008, 1, 1, 90_000,
+        int full = attachmentTriangles(Trees.generate(species, options.withLods(List.of(new TreeLod(10, 6, 3, 0.008,
+            1, 1, 2_000_000, 0))), 4).lods().getFirst());
+        int wood = Trees.generate(species, options.withLods(List.of(new TreeLod(10, 6, 3, 0.008, 1, 1, 2_000_000,
             TreeLod.NO_ATTACHMENTS))), 4).lods().getFirst().triangleCount();
         Tree tight = Trees.generate(species, options.withLods(List.of(new TreeLod(10, 6, 3, 0.008, 1, 1,
             wood + full / 3 + 1, 0))), 4);
@@ -364,7 +365,8 @@ class AttachmentTest {
         }
         assertThat(Season.of(-10)).isEqualTo(Season.WINTER);
         assertThat(Season.of(500)).isEqualTo(Season.SPRING);
-        assertThat(TreeOptions.DEFAULTS.withDay(250).season()).isEqualTo(Season.AUTUMN);
+        assertThat(TreeOptions.DEFAULTS.withDay(250).season()).isEqualTo(Season.SUMMER);
+        assertThat(TreeOptions.DEFAULTS.withDay(280).season()).isEqualTo(Season.AUTUMN);
         assertThat(TreeOptions.DEFAULTS.withSeason(Season.SPRING).day()).isEqualTo(135);
         assertThat(new TreeLod(3, 3, 3, 0, 1, 1, 1).attachmentDetail()).isZero();
         assertThat(TreeSpecies.BEECH.withFruiting(TreeSpecies.ROWAN.fruiting()).fruiting())

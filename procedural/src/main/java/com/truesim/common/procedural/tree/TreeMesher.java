@@ -297,8 +297,11 @@ final class TreeMesher {
         double gx = skeleton.leaf(i, 6);
         double gy = skeleton.leaf(i, 7);
         double gz = skeleton.leaf(i, 8);
-        double length = skeleton.leaf(i, 9) * scale;
-        double width = skeleton.leaf(i, 10) * scale;
+        // Deciduous leaves unfold through spring: a third of their size in April, half at apple blossom, full by mid June
+        double grown = foliage.deciduous() ? 0.35 + 0.65 * com.truesim.common.procedural.flora.Phenology.smooth(110,
+            165, context.day() % 365) : 1;
+        double length = skeleton.leaf(i, 9) * scale * grown;
+        double width = skeleton.leaf(i, 10) * scale * grown;
         // Across the card: direction x normal, so normal x across = direction (bitangent along +v)
         double wx = dy * gz - dz * gy;
         double wy = dz * gx - dx * gz;

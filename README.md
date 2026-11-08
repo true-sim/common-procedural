@@ -175,22 +175,26 @@ FloraSummary shown = laden.flora();          // buds, flowers, fruits, their mea
 byte[] palette = laden.palette().texels();   // the attachments' base color texture, 16 x 36 sRGB
 ```
 
-- **Where** (`Fruiting.Placement`): at twig tips (rowan's corymbs, elder's umbels, roses, spruce cones), or along the
-  outer part of shoots, off to their sides (apple spurs, blueberry flowers, larch cones), with a density (a chance per
-  tip, a number per metre), from a branch level, above a height (spruce and fir cone high in the crown). Sites are
+- **Where** (`Fruiting.Placement`): at twig tips (roses, alpenrose's trusses, spruce cones), or along the outer part
+  of shoots, off to their sides (apple spurs, rowan's and elder's heads on their short side shoots, blueberry
+  flowers, larch cones), with a density (a chance per tip, a number per metre), from a branch level, above a height
+  (spruce and fir cone high in the crown). Sites are
   drawn from the seed, the same on every day, so a flower is the same flower from bud to fruit.
 - **How** (`Inflorescence`): solitary, a cluster on equal stalks (apple, alpenrose), an umbel to a dome (elder), a
   corymb to a flat top, branching partway out (rowan), a raceme along an axis (lingonberry); compound heads carry
-  florets around each stalk's end (rowan five, elder six), so a head shows 100 to 200 flowers. Each flower has its
+  florets packed around each stalk's end (rowan ten, elder eighteen), so a head shows 120 to 290 flowers. Each flower has its
   stalk (pedicel), the head its common stalk (peduncle); heads are held up (`erect`), bells nod (`nodding`), heads
   heavy with fruit sink (`fruitDroop`) and a ripe fruit hangs from its stalk (`FruitShape.hang`).
 - **When** (`Phenology`, days of the year for the montane belt of the Alps): each flower has its own dates, drawn from
-  its head's time (heads open within about a week) and its own: a closed bud growing for `budDays`, opening over a
+  its head's time (a tree's heads open over the middle half of the species' window) and its own (a head's flowers
+  within a few days): a closed bud growing for `budDays`, opening over a
   day and a half, aging (its petals' color ramp: rowan's cream to brown, apple's pink buds to white) for
   `flowerDays`; then, for the `fruitSet` share, a fruit growing to full size by `ripenStart`, ripening green to the
   species' color over `ripenDays` from its own day, falling on its own day in the drop window, which may reach past
   the year's end (rose hips, rowan berries, lingonberries hang into the winter; spruce and larch cones longer). A
-  season stands for a day (`Season.day()`: 135, 196, 270, 15), `withDay` sets the day and its season (leaves).
+  season stands for a day (`Season.day()`: 135, 196, 270, 15), `withDay` sets the day and its season (the leaves'
+  tile: summer until the equinox, so berries ripen among green leaves). Deciduous leaves unfold through spring (a
+  third of their size in April, half at apple blossom, full by mid June).
 - **Shapes** (`FloraWriter`): flowers of free petals (count, length, width, outline: round, pointed, notched,
   toothed; cupping; curling closed as buds), fused bells and trumpets ending in lobes (gentian, blueberry's urn,
   lingonberry's bell, alpenrose's funnel), composite heads of rays around a domed disc (arnica, aster), globes of
@@ -216,10 +220,13 @@ byte[] palette = laden.palette().texels();   // the attachments' base color text
   September); attachments are placed after snow and crop have sunk the branches, so they stay on them. Snow on them
   is the material's (the engine's snow cover reads their physical albedo and normals).
 - **Levels of detail** (`TreeLod.attachmentDetail`): 0 full (petals in segments, sepals, pedicels), 1 simplified
-  (fewer segments and sides, no sepals or pedicels), 2 merged (a head of many as one shape: a flattened dome of
-  blossom, a hanging blob of berries, in their mean color), 3 none. Tiny flowers (under 8 mm across) are drawn simply
-  at every level. Every level stays within its triangle budget, flowers and fruits included: over it, the level
-  simplifies them first, then drops leaf cards and twigs, by turns. Its error counts what was merged or dropped.
+  (fewer segments and sides, no sepals or pedicels; a compound head's florets merged per stalk into a small dome or
+  bunch), 2 merged (a head of many as one shape: a flattened dome of blossom, a hanging blob of berries, in their mean
+  color), 3 none. Tiny flowers (under 8 mm across) are drawn simply at every level. Every level stays within its
+  triangle budget, flowers and fruits included: over it, the level simplifies and merges them first, then thins leaf
+  cards and twigs; only when even that leaves no room are they dropped (and the thinning starts over). Its error
+  counts what was merged or dropped. With the default near budget (90,000) a flowering rowan's or elder's near level
+  draws merged florets; the films' close-ups raise it to 400,000 to show every flower.
 - **Far away**: the billboard's capture and an impostor bake draw the most detailed level, attachments included;
   `ImpostorHints.bloom()` and `bloomCoverage()` give the attachments' mean albedo and the share of the side view they
   cover, for a far representation captured on another day (or none) to tint by.

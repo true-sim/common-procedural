@@ -20,9 +20,13 @@ public enum Season {
         };
     }
 
-    /** The season of day {@code day} of the year: March to May spring, June to August summer, and so on. */
+    /**
+     * The leaves' season on day {@code day} of the year: March to May spring, June to the equinox (22 September)
+     * summer, then autumn colors to the end of November, winter. (Leaves in the Alps turn from late September: a
+     * rowan's berries ripen among green leaves.)
+     */
     public static Season of(double day) {
         double d = ((day % 365) + 365) % 365;
-        return d < 59 || d >= 334 ? WINTER : d < 151 ? SPRING : d < 243 ? SUMMER : AUTUMN;
+        return d < 59 || d >= 334 ? WINTER : d < 151 ? SPRING : d < 264 ? SUMMER : AUTUMN;
     }
 }

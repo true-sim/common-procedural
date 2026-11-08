@@ -101,36 +101,110 @@ class FloraFilms {
     @Test
     @EnabledIfEnvironmentVariable(named = "TRUESIM_FLORA_FILMS", matches = "true")
     void treeTurntables() throws IOException {
+        String only = System.getenv("TRUESIM_FLORA_ONLY");
         for (TreeSpecies species : List.of(TreeSpecies.ROWAN, TreeSpecies.APPLE, TreeSpecies.ELDER,
             TreeSpecies.DOG_ROSE, TreeSpecies.ALPENROSE, TreeSpecies.BLUEBERRY, TreeSpecies.LINGONBERRY)) {
+            if (only != null && !only.contains(species.name())) {
+                continue;
+            }
             double bloom = species.fruiting().phenology().peakBloom();
             double ripe = species.fruiting().phenology().ripe();
-            Tree flowering = Trees.generate(species, TreeOptions.DEFAULTS.withDay(bloom), 7);
-            Tree fruiting = Trees.generate(species, TreeOptions.DEFAULTS.withDay(ripe), 7);
+            // close-ups: the near level with room for every flower (a budget of 400,000 triangles)
+            TreeOptions near = TreeOptions.DEFAULTS.withLods(List.of(new com.truesim.common.procedural.tree.TreeLod(
+                10, 6, 3, 0.008, 1, 1, 400_000, 0)));
+            Tree flowering = Trees.generate(species, near.withDay(bloom), 7);
+            Tree fruiting = Trees.generate(species, near.withDay(ripe), 7);
             double size = Math.max(flowering.height(), 2 * flowering.crownRadius());
             Path out = ProceduralFilms.folder("turntable-" + species.name());
             try (Stage stage = new Stage(device, WIDTH * SUPER, HEIGHT * SUPER, Math.max(40, 20 * size),
                 Math.max(8, 6 * size))) {
                 ProceduralFilms.Placed left = ProceduralFilms.load(stage, flowering);
                 ProceduralFilms.Placed right = ProceduralFilms.load(stage, fruiting);
-                double apart = 0.62 * Math.max(2.2 * flowering.crownRadius(), 0.5 * flowering.height()) + 0.1 * size;
+                double apart = 0.55 * Math.max(2.1 * flowering.crownRadius(), 0.45 * flowering.height());
                 int a = ProceduralFilms.place(stage, left, 0, -apart, 0, 0);
                 int b = ProceduralFilms.place(stage, right, 0, apart, 0, 0);
-                double distance = 1.45 * (2 * apart + size) + 0.3;
-                stage.wind(ProceduralFilms.wind(3)).look(0, 0.45 * flowering.height() + 0.15 * size, distance, 0,
-                    0.45 * flowering.height(), 0, 40).shade();
+                double distance = 1.05 * (2 * apart + size) + 0.2;
+                stage.wind(ProceduralFilms.wind(2)).shade();
                 String caption = title(species.name()) + "   left: " + date(bloom) + " in flower   right: "
                     + date(ripe) + " in fruit";
                 int frames = 150;
-                for (int f = 0; f < frames; f++) {
+                int f = 0;
+                for (; f < frames; f++) {
                     double yaw = 2 * Math.PI * f / frames;
                     stage.move(a, left.meshes()[0], left.material(), -apart, 0, yaw, 1);
                     stage.move(b, right.meshes()[0], right.material(), apart, 0, yaw, 1);
+                    stage.look(0, 0.5 * flowering.height() + 0.1 * size, distance, 0, 0.5 * flowering.height(), 0, 40);
                     stage.frames(f == 0 ? 4 : 1, 1 / 30.0);
                     write(stage.shot(), out, f, caption);
                 }
+                // then close: a head in flower, then one in fruit, the trees still
+                stage.move(a, left.meshes()[0], left.material(), -apart, 0, 0, 1);
+                stage.move(b, right.meshes()[0], right.material(), apart, 0, 0, 1);
+                for (int side = 0; side < 2; side++) {
+                    Tree tree = side == 0 ? flowering : fruiting;
+                    double[] focus = focus(tree);
+                    double fx = focus[0] + (side == 0 ? -apart : apart);
+                    double reach = Math.max(0.12, 3 * focus[3]);
+                    String close = title(species.name()) + "   " + (side == 0 ? date(bloom) + ", in flower"
+                        : date(ripe) + ", in fruit") + "   close";
+                    double outward = Math.atan2(focus[0], focus[2]); // from the trunk out through the head
+                    for (int k = 0; k < 75; k++, f++) {
+                        double angle = outward + 0.5 * (k / 75.0 - 0.5);
+                        stage.look(fx + reach * Math.sin(angle), focus[1] + 0.35 * reach, focus[2] + reach
+                            * Math.cos(angle), fx, focus[1], focus[2], 40);
+                        stage.frames(k == 0 ? 4 : 1, 1 / 30.0);
+                        write(stage.shot(), out, f, close);
+                    }
+                }
             }
         }
+    }
+
+    /**
+     * A head to look at closely: the attachments' vertices near the one most toward the camera (+z) in the middle of
+     * the crown; their centre (x, y, z) and extent.
+     */
+    private static double[] focus(Tree tree) {
+        var mesh = tree.lods().getFirst();
+        var position = mesh.vertices().attribute(com.truesim.common.procedural.mesh.ProceduralVertex.POSITION);
+        double best = Double.NEGATIVE_INFINITY;
+        int pick = -1;
+        double h = tree.height();
+        for (int t = mesh.submeshStart(Tree.ATTACHMENTS); t < mesh.submeshEnd(Tree.ATTACHMENTS); t++) {
+            int v = mesh.indices()[t];
+            double y = position.y(v);
+            // the outermost, in the middle of the crown, toward the camera's side
+            double score = Math.hypot(position.x(v), position.z(v)) + 0.5 * position.z(v) - Math.abs(y - 0.55 * h);
+            if (score > best) {
+                best = score;
+                pick = v;
+            }
+        }
+        if (pick < 0) {
+            return new double[] {0, 0.5 * h, tree.crownRadius(), 0.1};
+        }
+        double px = position.x(pick);
+        double py = position.y(pick);
+        double pz = position.z(pick);
+        double sx = 0;
+        double sy = 0;
+        double sz = 0;
+        double extent = 0;
+        int n = 0;
+        double radius = 0.1 + 0.02 * h;
+        for (int t = mesh.submeshStart(Tree.ATTACHMENTS); t < mesh.submeshEnd(Tree.ATTACHMENTS); t++) {
+            int v = mesh.indices()[t];
+            double d = Math.sqrt(Math.pow(position.x(v) - px, 2) + Math.pow(position.y(v) - py, 2)
+                + Math.pow(position.z(v) - pz, 2));
+            if (d < radius) {
+                sx += position.x(v);
+                sy += position.y(v);
+                sz += position.z(v);
+                extent = Math.max(extent, d);
+                n++;
+            }
+        }
+        return new double[] {sx / n, sy / n, sz / n, extent};
     }
 
     @Test
@@ -230,7 +304,7 @@ class FloraFilms {
                     String caption = title(species.name()) + "   " + date(d) + flora(tree);
                     for (int h = 0; h < hold; h++) {
                         double a = 0.6 + 0.9 * frame / (steps * hold);
-                        double distance = 1.55 * Math.max(tree.height(), 2 * tree.crownRadius()) + 2;
+                        double distance = 1.15 * Math.max(tree.height(), 2 * tree.crownRadius()) + 1;
                         stage.look(distance * Math.sin(a), 0.45 * tree.height() + 0.6, distance * Math.cos(a), 0,
                             0.48 * tree.height(), 0, 45);
                         if (frame == 0) {

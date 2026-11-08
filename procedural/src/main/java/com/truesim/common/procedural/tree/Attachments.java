@@ -170,7 +170,8 @@ final class Attachments {
         Phenology p = fruiting.phenology();
         boolean sets = Hash.random(h, 13 + 4 * j) < fruiting.fruitSet();
         // A head flowers within about a week, the tree over its whole season: the head's time, then the flower's
-        double open = 0.75 * Hash.random(h, 9) + 0.25 * Hash.random(h, 10 + 4 * j);
+        // (a tree flowers over the middle of its species' window: its heads within about half of it)
+        double open = 0.25 + 0.4 * Hash.random(h, 9) + 0.1 * Hash.random(h, 10 + 4 * j);
         double ripen = 0.6 * Hash.random(h, 8) + 0.4 * Hash.random(h, 11 + 4 * j);
         return p.state(day, open, ripen, Hash.random(h, 12 + 4 * j), sets, state);
     }
@@ -278,7 +279,7 @@ final class Attachments {
         Palette palette = fruiting.palette();
         Part fruitPart = fruiting.cones() ? Part.CONE : alt ? Part.FRUIT_ALT : Part.FRUIT;
         double stalkU = fruits > 0 ? meanRipe : 0;
-        double pedicelRadius = Math.max(0.0005, 0.025 * inflorescence.pedicel());
+        double pedicelRadius = Math.max(0.0004, 0.015 * inflorescence.pedicel());
         if (detail == 2 && k > 3) {
             merged(fruiting, site, axis, reference, fruits, blooming, meanRipe, meanAge, fruitPart, detail, h);
             return;
@@ -348,6 +349,10 @@ final class Attachments {
             }
             Vec3 r1 = FloraWriter.around(facing, angle);
             Vec3 r2 = facing.cross(r1);
+            if (detail >= 1 && florets > 1) {
+                umbellet(fruiting, j * florets, florets, at, facing, r1, spacing, fruitPart, h + j);
+                continue;
+            }
             for (int m = 0; m < florets; m++) {
                 int f = j * florets + m;
                 if (stage[f] == FloralState.Stage.NONE) {
@@ -356,7 +361,7 @@ final class Attachments {
                 Vec3 point = at;
                 if (m > 0) {
                     double a = m * 2.399963;
-                    double d = spacing * Math.sqrt(m / (double) florets);
+                    double d = 0.6 * spacing * Math.sqrt(m); // packed as a sunflower's seeds
                     point = at.addScaled(r1, d * Maths.cos(a)).addScaled(r2, d * Maths.sin(a))
                         .addScaled(facing, -0.25 * d);
                 }
@@ -379,6 +384,48 @@ final class Attachments {
                         Hash.combine(h, f));
                 }
             }
+        }
+    }
+
+    /**
+     * A compound head's florets at one stalk's end as one shape (simplified levels): a flattened dome of blossom the
+     * size of the little umbel, or a small blob of its berries.
+     */
+    private void umbellet(Fruiting fruiting, int first, int florets, Vec3 at, Vec3 facing, Vec3 across,
+        double spacing, Part fruitPart, int seed) {
+        int fruits = 0;
+        int blooming = 0;
+        double ripe = 0;
+        double ages = 0;
+        double grown = 0;
+        for (int m = 0; m < florets; m++) {
+            int f = first + m;
+            if (stage[f] == FloralState.Stage.FRUIT) {
+                fruits++;
+                ripe += ripeness[f];
+                grown += size[f];
+            } else if (stage[f] != FloralState.Stage.NONE) {
+                blooming++;
+                ages += age[f];
+                grown += size[f] * (0.5 + 0.5 * open[f]);
+            }
+        }
+        int shown = fruits + blooming;
+        if (shown == 0) {
+            return;
+        }
+        double radius = 0.6 * spacing * Math.sqrt(florets - 1) + (fruiting.flower() == null
+            ? fruiting.fruit().radius() : 0.8 * fruiting.flower().reach());
+        double scale = Math.sqrt(shown / (double) florets) * grown / shown;
+        if (blooming >= fruits) {
+            FruitShape dome = new FruitShape(FruitShape.Form.BERRY, radius, 0.4, 0, 0, 0, 0, 0);
+            flora.frame(at.addScaled(facing, -0.25 * radius), facing, across)
+                .fruit(dome, scale, ages / blooming, Part.PETAL, 2, seed);
+        } else {
+            FruitShape fruit = fruiting.fruit();
+            FruitShape blob = new FruitShape(FruitShape.Form.BERRY, radius, 0.9, 0, 0, 0, 0, 0);
+            Vec3 down = FloraWriter.sink(facing, fruit.hang() * Maths.acos(Math.clamp(-facing.y(), -1, 1)));
+            flora.frame(at, down, across).fruit(blob, scale, ripe / fruits, fruitPart, 2, seed);
         }
     }
 

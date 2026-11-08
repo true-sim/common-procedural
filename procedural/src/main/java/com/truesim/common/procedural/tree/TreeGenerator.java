@@ -108,8 +108,8 @@ public final class TreeGenerator {
     }
 
     /**
-     * One level, within its budget: flowers and fruits simplified, leaf cards and thin branches dropped further, by
-     * turns, until it fits.
+     * One level, within its budget: flowers and fruits simplified and merged, then leaf cards and thin branches
+     * dropped further, flowers and fruits dropped last, until it fits.
      */
     private ProceduralMesh level(TreeMesher.Context context, TreeLod lod, double finer) {
         int keep = lod.leafKeep();
@@ -126,8 +126,14 @@ public final class TreeGenerator {
             if (mesh.triangleCount() <= lod.triangleBudget() || attempt == 16) {
                 return mesh;
             }
-            if (attempt % 2 == 0 && detail < TreeLod.NO_ATTACHMENTS) {
+            // flowers and fruits simplified and merged first, then leaves and twigs thinned; dropped last
+            if (detail < 2) {
                 detail++;
+            } else if (detail == 2 && keep > 6 * lod.leafKeep()) {
+                // even thinned leaves leave no room: drop flowers and fruits, and start thinning over
+                detail++;
+                keep = lod.leafKeep();
+                minRadius = Math.min(lod.minRadius(), 0.6 * skeleton.radius(0));
             } else {
                 keep += Math.max(1, keep / 2);
                 minRadius *= 1.4;
