@@ -1,0 +1,35 @@
+name: CI
+
+# Tests run on pull requests only: main gets exactly a tested, up-to-date PR (release.sh merges only those), so a
+# push to main only compiles, to keep the Gradle cache that pull requests read warm.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read # build-logic plugins and libraries from GitHub Packages
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 27
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew ${{ github.event_name == 'push' && 'assemble testClasses' || 'build' }}
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: reports
+          path: |
+            */build/reports
+            */build/test-results
