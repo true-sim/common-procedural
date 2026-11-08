@@ -27,8 +27,16 @@ project(":common-procedural").projectDir = file("procedural")
 include("common-procedural-assets")
 project(":common-procedural-assets").projectDir = file("assets")
 
+// Pictures and films through the engine, only with -Ptruesim.preview=true: the engine stays out of the library's build
+// (until per-material displacement is released, with -Ptruesim.engine=../engine-vegetation, its branch).
+val preview = providers.gradleProperty("truesim.preview").orNull == "true"
+if (preview) {
+    include("preview")
+}
+
 // Sibling checkouts are used as included builds when present (override with -Ptruesim.<repo>=<path>, or false).
-val truesimRepos = listOf("build-logic", "common-math", "common-jobs", "scene")
+val truesimRepos = listOf("build-logic", "common-math", "common-jobs", "scene") +
+    (if (preview) listOf("common-state", "common-graph", "engine") else listOf())
 for (repo in truesimRepos) {
     providers.gradleProperty("truesim.$repo").orElse("../$repo").get()
         .takeIf { file(it).isDirectory }?.let { includeBuild(it) }

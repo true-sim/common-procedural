@@ -17,6 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # Until common-math 0.7.0 (PolylineFrames, Octahedral, Meshes, ridged and cellular noise, PoissonDisc) is
+      # released: its pull request's branch beside this checkout, used as an included build. Remove after the release.
+      - name: common-math's procedural-math branch (until released)
+        run: git clone --depth 1 --branch procedural-math https://github.com/true-sim/common-math.git ../common-math
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
