@@ -70,7 +70,7 @@ final class Stage implements AutoCloseable {
     final FrameGraph graph;
     final TestTarget target;
     final Camera camera = new Camera();
-    private final float[] sun = normalize(-0.45f, 0.6f, -0.65f);
+    private float[] sun = normalize(-0.45f, 0.6f, -0.65f);
     private int nextId;
     private SceneView view;
     private Shadows shadows;
@@ -78,11 +78,17 @@ final class Stage implements AutoCloseable {
     private ProceduralWindParameters wind = ProceduralWindParameters.DEFAULTS;
 
     Stage(VulkanDevice device, int width, int height, double groundSize) {
+        this(device, width, height, groundSize, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64), 1 << 12);
+    }
+
+    /** A stage with room for {@code capacity} in its geometry pool and {@code instances} instances to start with. */
+    Stage(VulkanDevice device, int width, int height, double groundSize, GeometryPool.Capacity capacity,
+        int instances) {
         this.device = device;
         this.width = width;
         this.height = height;
-        pool = new GeometryPool(device, GeometryPool.Capacity.of(1 << 22, 1 << 18, 64));
-        scene = new GpuScene(device, pool, 1 << 12);
+        pool = new GeometryPool(device, capacity);
+        scene = new GpuScene(device, pool, instances);
         renderer = new MeshletRenderer(device, scene, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_D32_SFLOAT);
         materials = new Materials(device, 128);
         materials.register(com.truesim.common.procedural.preview.materials.ProceduralTree.TYPE);
@@ -91,13 +97,46 @@ final class Stage implements AutoCloseable {
         graph = new FrameGraph(device, 2);
         target = new TestTarget(device, width, height, Format.R8G8B8A8_SRGB);
         scene.setMaterials(materials);
-        int ground = pool.add(ground(groundSize, 64));
-        int soil = materials.add(new Material(MetallicRoughnessParameters.DEFAULTS
-            .withBaseColor(new Color(0.06f, 0.08f, 0.03f, 1)).withRoughness(0.95f).withMetallic(0)));
-        scene.set(nextId++, ground, soil, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        if (groundSize > 0) {
+            int ground = pool.add(ground(groundSize, 64));
+            int soil = materials.add(new Material(MetallicRoughnessParameters.DEFAULTS
+                .withBaseColor(new Color(0.06f, 0.08f, 0.03f, 1)).withRoughness(0.95f).withMetallic(0)));
+            scene.set(nextId++, ground, soil, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        }
         lights.directional(0, -sun[0], -sun[1], -sun[2], 4.2f, 3.9f, 3.4f);
         lights.shadow(0, ShadowSpec.cascades(4, 2048, 150));
         lights.setCount(1);
+    }
+
+    /** The sun from direction ({@code x}, {@code y}, {@code z}) (toward it), its shadows {@code shadow}: before shade. */
+    Stage sun(float x, float y, float z, ShadowSpec shadow) {
+        sun = normalize(x, y, z);
+        lights.directional(0, -sun[0], -sun[1], -sun[2], 4.2f, 3.9f, 3.4f);
+        lights.shadow(0, shadow);
+        return this;
+    }
+
+    /** Any scene mesh in the geometry pool. */
+    int addMesh(MeshData mesh) {
+        return pool.add(mesh);
+    }
+
+    /** A plain material tinted by the vertex colour (white base), {@code roughness}. */
+    int vertexColorMaterial(float roughness) {
+        return materials.add(new Material(MetallicRoughnessParameters.DEFAULTS.withRoughness(roughness)
+            .withMetallic(0)));
+    }
+
+    /** A new instance id. */
+    int id() {
+        return nextId++;
+    }
+
+    /** Sets instance {@code id}: {@code mesh} at (x, y, z), turned by {@code yaw}, scaled (sx, sy, sz). */
+    void set(int id, int mesh, int material, double x, double y, double z, double yaw, double sx, double sy,
+        double sz) {
+        scene.set(id, mesh, material, x, y, z, 0, (float) Math.sin(yaw / 2), 0, (float) Math.cos(yaw / 2),
+            (float) sx, (float) sy, (float) sz);
     }
 
     /** {@code mesh} in the geometry pool, with its wind data. */

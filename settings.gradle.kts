@@ -23,6 +23,14 @@ rootProject.name = "common-procedural"
 include("common-procedural")
 project(":common-procedural").projectDir = file("procedural")
 
+// Ecology: which plants grow where (climate by altitude and aspect, hydrology, competition), as fields and instances.
+include("common-procedural-ecology")
+project(":common-procedural-ecology").projectDir = file("ecology")
+
+// The ecology over effects-terrain's surface (its CPU queries): optional, so the ecology needs no terrain library.
+include("common-procedural-ecology-terrain")
+project(":common-procedural-ecology-terrain").projectDir = file("ecology-terrain")
+
 // Procedural assets through the scene's asset system: recipe files imported into meshes and models, cached.
 include("common-procedural-assets")
 project(":common-procedural-assets").projectDir = file("assets")
@@ -37,6 +45,8 @@ if (preview) {
 // Sibling checkouts are used as included builds when present (override with -Ptruesim.<repo>=<path>, or false).
 val truesimRepos = listOf("build-logic", "common-math", "common-jobs", "scene") +
     (if (preview) listOf("common-state", "common-graph", "engine") else listOf())
+// Libraries only fetched, never included from a sibling (effects-terrain's own build includes the engine's)
+val fetchedRepos = listOf("effects-terrain")
 for (repo in truesimRepos) {
     providers.gradleProperty("truesim.$repo").orElse("../$repo").get()
         .takeIf { file(it).isDirectory }?.let { includeBuild(it) }
@@ -44,7 +54,7 @@ for (repo in truesimRepos) {
 
 dependencyResolutionManagement {
     repositories {
-        for (repo in truesimRepos) {
+        for (repo in truesimRepos + fetchedRepos) {
             maven("https://maven.pkg.github.com/true-sim/$repo") {
                 credentials {
                     username = providers.gradleProperty("gpr.user").orElse(providers.environmentVariable("GITHUB_ACTOR")).orNull
