@@ -23,8 +23,12 @@ rootProject.name = "common-procedural"
 include("common-procedural")
 project(":common-procedural").projectDir = file("procedural")
 
+// Procedural assets through the scene's asset system: recipe files imported into meshes and models, cached.
+include("common-procedural-assets")
+project(":common-procedural-assets").projectDir = file("assets")
+
 // Sibling checkouts are used as included builds when present (override with -Ptruesim.<repo>=<path>, or false).
-val truesimRepos = listOf("build-logic", "common-math")
+val truesimRepos = listOf("build-logic", "common-math", "common-jobs", "scene")
 for (repo in truesimRepos) {
     providers.gradleProperty("truesim.$repo").orElse("../$repo").get()
         .takeIf { file(it).isDirectory }?.let { includeBuild(it) }

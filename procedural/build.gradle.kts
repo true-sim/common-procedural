@@ -6,5 +6,5 @@ plugins {
 description = "Procedural assets for true-sim: trees, rocks and more, generated deterministically from a seed."
 
 dependencies {
-    api("com.truesim.common:common-math:0.6.1")
+    api("com.truesim.common:common-math:0.7.0") // PolylineFrames, Octahedral, Meshes, ridged and cellular noise, PoissonDisc
 }
