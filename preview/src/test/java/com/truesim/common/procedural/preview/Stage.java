@@ -212,7 +212,12 @@ final class Stage implements AutoCloseable {
      * leaves are single sheets), swaying within {@code reach} metres.
      */
     int paletteMaterial(int texture, float roughness, float reach, float branchSway) {
-        ProceduralTreeParameters p = ProceduralTreeParameters.DEFAULTS.withBranchSway(branchSway)
+        return paletteMaterial(texture, roughness, reach, branchSway, ProceduralTreeParameters.DEFAULTS.leafFlutter());
+    }
+
+    /** A palette material whose leaves flutter {@code flutter} metres per m/s (small plants' blades: little). */
+    int paletteMaterial(int texture, float roughness, float reach, float branchSway, float flutter) {
+        ProceduralTreeParameters p = ProceduralTreeParameters.DEFAULTS.withBranchSway(branchSway).withLeafFlutter(flutter)
             .withBase(MetallicRoughnessParameters.DEFAULTS.withBaseColorTexture(texture).withRoughness(roughness)
                 .withMetallic(0));
         return materials.add(new Material(p).displacement(reach).doubleSided(true));

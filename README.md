@@ -94,7 +94,7 @@ AssetRef<MeshData> gentian = paths.ref(RenderAssets.MESH, "game://meadow/gentian
 
 ## Trees
 
-Fifteen presets, tuned by eye to their species' habit, for the Alpine showcase first (the flowering and fruiting
+Twenty-one presets (their names the ecology's species ids), tuned by eye to their species' habit, for the Alpine showcase first (the flowering and fruiting
 ones are in [Flowers, fruits and cones](#flowers-fruits-and-cones)):
 
 | Preset | Species | Growth | Foliage |
@@ -114,6 +114,12 @@ ones are in [Flowers, fruits and cones](#flowers-fruits-and-cones)):
 | `ALPENROSE` | alpenrose (*Rhododendron ferrugineum*), dwarf shrub | space colonization over eight stems | evergreen leaf clusters |
 | `BLUEBERRY` | bilberry (*Vaccinium myrtillus*), dwarf shrub | space colonization over eight stems | leaf clusters |
 | `LINGONBERRY` | lingonberry (*Vaccinium vitis-idaea*), dwarf shrub | space colonization over ten stems | evergreen leaf clusters |
+| `STONE_PINE` | stone pine (*Pinus cembra*) | parametric: a dense column down to the ground | needle tufts |
+| `OAK` | pedunculate oak (*Quercus robur*) | space colonization in a broad ellipsoid | leaf clusters |
+| `ASH` | ash (*Fraxinus excelsior*) | space colonization in an egg | leaf clusters |
+| `ALDER` | black alder (*Alnus glutinosa*), stream banks | space colonization in a narrow egg | leaf clusters |
+| `GREEN_ALDER` | green alder (*Alnus alnobetula*), shrub | space colonization over seven springy stems | leaf clusters |
+| `WILLOW` | riverbank willow (*Salix eleagnos*, *S. purpurea*), shrub | space colonization over eight wands | narrow leaf clusters |
 
 ### How a tree is made
 
@@ -243,6 +249,10 @@ byte[] palette = laden.palette().texels();   // the attachments' base color text
 | `LINGONBERRY` | lingonberry (*Vaccinium vitis-idaea*), dwarf shrub | racemes of white-pink bells in June; red berries to spring |
 | `SPRUCE`, `FIR`, `LARCH`, `PINE`, `MUGO` | the conifers | cones: red in May (larch's pink in April), brown in autumn; spruce's hang, fir's and larch's stand |
 | `HAZEL` | hazel | nuts in clusters of one to four, ripe in September |
+| `STONE_PINE` | stone pine | upright violet cones high in the crown, brown in autumn |
+| `OAK`, `ASH` | oak, ash | acorns on long stalks; bunches of winged seeds hanging into the winter |
+| `ALDER`, `GREEN_ALDER` | the alders | small woody cones in clusters, black through the winter |
+| `WILLOW` | willow | silvery-yellow catkins in April, white wool in June |
 
 ## Plants: meadow flowers and grass
 
@@ -260,11 +270,18 @@ and leaf with a phase of its own: effects-vegetation's plant material sways them
 |---|---|---|
 | `GENTIAN` | trumpet gentian (*Gentiana acaulis*) | one deep blue trumpet on a rosette, May and June |
 | `ARNICA` | arnica (*Arnica montana*) | orange-yellow heads of toothed rays, July |
-| `ASTER` | alpine aster (*Aster alpinus*) | violet rays around a yellow disc, July and August |
+| `ALPINE_ASTER` | alpine aster (*Aster alpinus*) | violet rays around a yellow disc, July and August |
 | `EDELWEISS` | edelweiss (*Leontopodium nivale* subsp. *alpinum*) | a star of white felted bracts, July to September |
 | `BUTTERCUP` | meadow buttercup (*Ranunculus acris*) | glossy yellow cups on branched stems, May to July |
 | `CLOVER` | red clover (*Trifolium pratense*) | round pink-purple heads, June to September |
 | `GRASS` | a meadow grass clump (after *Festuca*, *Poa*) | spike-like panicles in June, straw in August; blades straw from October |
+| `SEDGE` | common sedge (*Carex nigra*), wet ground | dark spikes on three-edged culms, May to July |
+| `COTTON_GRASS` | cotton grass (*Eriophorum angustifolium*), bogs | nodding heads turning to white cotton in June and July |
+| `RUSH` | soft rush (*Juncus effusus*), wet ground | brown clusters from the side of its stems, summer |
+| `MARSH_MARIGOLD` | marsh marigold (*Caltha palustris*), springs and streams | golden cups, April to June |
+
+Not yet generated, of the ecology's species: moss and lichen (ground covers rather than plants: a texture or decal
+layer, to come with #5), ferns and heather (#2).
 
 Through the asset manager a plant is a `.plant` recipe (slots `foliage` and `flowers`), and any tree or plant recipe's
 `#palette` is its palette as a texture, for the attachments', foliage's and flowers' materials:

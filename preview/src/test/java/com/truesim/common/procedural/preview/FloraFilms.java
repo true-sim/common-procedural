@@ -64,8 +64,9 @@ class FloraFilms {
     static PlacedPlant load(Stage stage, Plant plant, float sway) {
         int palette = stage.texture(Looks.palette(plant.palette()));
         float reach = (float) (plant.height() * 0.6 + 0.1);
-        int material = stage.paletteMaterial(palette, 0.85f, reach, sway);
-        stage.paletteMaterial(palette, 0.5f, reach, sway);
+        // blades a few millimetres wide flutter a millimetre or so, not the trees' leaf cards' centimetres
+        int material = stage.paletteMaterial(palette, 0.85f, reach, sway, 0.0002f);
+        stage.paletteMaterial(palette, 0.5f, reach, sway, 0.0004f);
         int[] meshes = new int[plant.lods().size()];
         for (int l = 0; l < meshes.length; l++) {
             meshes[l] = stage.add(plant.lods().get(l));
