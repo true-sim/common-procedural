@@ -97,8 +97,8 @@ public final class MeshWriter {
         pivots[2 * i + 1] = reach;
         winds[4 * i] = trunk;
         winds[4 * i + 1] = branch;
-        winds[4 * i + 2] = leaf;
-        winds[4 * i + 3] = phase;
+        winds[4 * i + 2] = (float) ProceduralVertex.packLeafAndPhase(leaf, phase);
+        winds[4 * i + 3] = 1;
         return vertexCount++;
     }
 

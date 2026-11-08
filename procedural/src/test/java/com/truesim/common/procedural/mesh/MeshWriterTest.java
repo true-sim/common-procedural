@@ -46,7 +46,12 @@ class MeshWriterTest {
         var wind = mesh.vertices().attribute(ProceduralVertex.WIND);
         assertThat(wind.x(0)).isCloseTo(0.25, within(1 / 255.0));
         assertThat(wind.w(0)).isEqualTo(1);
-        assertThat(wind.z(b)).isEqualTo(1);
+        assertThat(ProceduralVertex.leaf(wind.z(0))).isCloseTo(0.75, within(1 / 30.0));
+        assertThat(ProceduralVertex.phase(wind.z(0))).isEqualTo(15 / 16.0); // a phase of 1 is the last step
+        assertThat(ProceduralVertex.leaf(wind.z(b))).isEqualTo(1);
+        assertThat(ProceduralVertex.packLeafAndPhase(0, 0)).isZero();
+        assertThat(ProceduralVertex.packLeafAndPhase(2, -1)).isEqualTo(240 / 255.0);
+        assertThat(ProceduralVertex.phase(ProceduralVertex.packLeafAndPhase(0.4, 0.3))).isEqualTo(4 / 16.0);
         var pivot = mesh.vertices().attribute(ProceduralVertex.WIND_PIVOT);
         assertThat(pivot.x(0)).isEqualTo(3);
         assertThat(pivot.y(0)).isEqualTo(4);

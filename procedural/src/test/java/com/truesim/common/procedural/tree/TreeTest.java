@@ -155,15 +155,16 @@ class TreeTest {
         for (int i = 0; i < mesh.vertexCount(); i++) {
             double trunk = wind.x(i);
             double branch = wind.y(i);
-            double leaf = wind.z(i);
-            double phase = wind.w(i);
+            double leaf = ProceduralVertex.leaf(wind.z(i));
+            double phase = ProceduralVertex.phase(wind.z(i));
+            assertThat(wind.w(i)).isEqualTo(1); // alpha masking multiplies by it
             for (double w : new double[] {trunk, branch, leaf, phase}) {
                 assertThat(w).isBetween(0.0, 1.0);
             }
             assertThat(pivot.x(i)).isBetween(-0.01, tree.height() + 0.01);
             assertThat(pivot.y(i)).isPositive();
             if (leafVertex[i]) {
-                assertThat(leaf).isLessThanOrEqualTo(flutter + 1 / 255.0);
+                assertThat(leaf).isLessThanOrEqualTo(flutter + 1 / 30.0);
                 continue;
             }
             assertThat(leaf).isZero(); // wood does not flutter
@@ -182,7 +183,7 @@ class TreeTest {
         assertThat(branchVertices).isPositive();
         // leaves: 0 where attached, the species' flutter at the far edge
         int i = mesh.indices()[mesh.submeshStart(Tree.LEAVES)];
-        assertThat(wind.z(i)).isZero();
+        assertThat(ProceduralVertex.leaf(wind.z(i))).isZero();
         // main branches' pivots sit near the y axis, as the format's (0, pivot height, 0) assumes
         Skeleton skeleton = generator.skeleton();
         double worst = 0;
@@ -204,14 +205,14 @@ class TreeTest {
         int distinct = 0;
         double maxBranch = 0;
         for (int i = 0; i < mesh.vertexCount(); i++) {
-            phases[i] = wind.w(i);
+            phases[i] = ProceduralVertex.phase(wind.z(i));
             maxBranch = Math.max(maxBranch, wind.y(i));
         }
         Arrays.sort(phases);
         for (int i = 1; i < phases.length; i++) {
             distinct += phases[i] != phases[i - 1] ? 1 : 0;
         }
-        assertThat(distinct).isGreaterThan(20);
+        assertThat(distinct).isEqualTo(15); // all 16 phases occur
         assertThat(maxBranch).isGreaterThan(0.9);
     }
 

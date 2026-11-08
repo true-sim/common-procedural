@@ -58,7 +58,7 @@ class RockTest {
             assertThat(mesh.bounds().max().y()).isGreaterThan(0.1 * params.size());
             Vec4Attribute wind = mesh.vertices().attribute(ProceduralVertex.WIND);
             for (int i = 0; i < mesh.vertexCount(); i++) {
-                assertThat(wind.get(i).lengthSquared()).isZero();
+                assertThat(wind.get(i)).isEqualTo(new com.truesim.common.math.Vec4(0, 0, 0, 1)); // no wind
             }
         }
         assertThat(rock.lods().getFirst().error()).isZero();
