@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":common-procedural-assets"))
     testImplementation(testFixtures("com.truesim.engine:engine-render:0.195.0")) // the headless renderer
     testImplementation("com.truesim.scene:scene-meshbuild:0.70.0")
+    testImplementation(project(":common-procedural-ecology-terrain")) // the ecology over Lauterbrunnen's terrain
 }
 
 // The wind hook's and the tree material's records as Java
@@ -24,8 +25,9 @@ coverage {
 }
 
 tasks.test {
-    maxHeapSize = "6g"
     extensions.configure<JacocoTaskExtension> { isEnabled = false }
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     providers.gradleProperty("films").orNull?.let { systemProperty("truesim.films", it) }
+    providers.gradleProperty("truesim.terrain.cache").orNull?.let { systemProperty("truesim.terrain.cache", it) }
+    maxHeapSize = "16g"
 }

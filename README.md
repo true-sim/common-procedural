@@ -1,19 +1,23 @@
 # common-procedural
 
 Procedural assets for true-sim, generated deterministically from parameters and a seed: trees first, rocks, and more
-to come ([roadmap](#roadmap)). The generators are engine-agnostic (common-math only); a second module brings them
-into the scene's asset system as recipe files.
+to come ([roadmap](#roadmap)), and the [ecology](#ecology-which-plants-grow-where) that decides which plants grow where.
+The generators are engine-agnostic (common-math only); a second module brings them into the scene's asset system as
+recipe files.
 
 | Module | Package | Contents |
 |---|---|---|
 | `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, rocks, their meshes |
-| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files imported as scene meshes and models, generated in the background, cached |
+| `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances |
+| `common-procedural-ecology-terrain` | `com.truesim.common.procedural.ecology.terrain` | the ecology over effects-terrain's surface and layers (optional) |
+| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, rocks, ecologies) imported as scene meshes, models and recipes, generated in the background, cached |
 | `preview` (not published) | | pictures and films through the engine, with a minimal tree material reading the wind format |
 
 ```kotlin
 dependencies {
     implementation("com.truesim.common:common-procedural:0.1.0")          // tools, servers, tests: no engine
     implementation("com.truesim.common:common-procedural-assets:0.1.0")   // games: through the asset cache
+    implementation("com.truesim.common:common-procedural-ecology:0.2.0")  // which plants grow where
 }
 ```
 
@@ -211,6 +215,211 @@ cells, banded by strata, and cut flat where buried. Presets `BOULDER`, `BLOCK`, 
 triangles), each closed and wound outward, its error the largest gap between its edges and the surface. UV is a planar
 projection from above in metres (rock materials usually map triplanar); wind is zero. More is #1.
 
+## Ecology: which plants grow where
+
+`common-procedural-ecology` decides what grows at every location of a terrain, from published Alpine ecology: the
+conditions there (climate by altitude and aspect, hydrology, snow, wind exposure, substrate, land use), each species'
+suitability, competition within and between layers, and the result as streaming tiles of fields and plant instances.
+Engine-agnostic (common-procedural's `Seeds` and common-math only); the terrain comes in through `EcologyTerrain`, a
+function of x and z.
+
+```java
+Ecology ecology = new Ecology(terrain, EcologyParameters.ALPS.withSeed(7)
+    .withLandUse(EcologyParameters.LandUse.MEADOWS), AlpineSpecies.ALL);
+EcologyTile tile = ecology.tile(3, -2);                  // 256 m: x 768 to 1024, z -512 to -256
+Instances plants = tile.instances();                     // position, yaw, height and width scale, species, seed, age, health
+float[] spruce = tile.abundance(tile.index("spruce"));   // 65 x 65 samples, every 4 m
+float[] meadow = tile.cover(GroundCover.MEADOW);         // for the terrain's material
+Site site = ecology.conditions(1000, -300);              // everything at one point
+```
+
+Over effects-terrain (optional module `common-procedural-ecology-terrain`, on `effects-terrain-data` only, no GPU):
+
+```java
+TerrainSurface surface = new TerrainSurface(site, surfaceParameters);           // effects-terrain's CPU surface
+EcologyTerrain ground = TerrainEcology.of(surface, 2);                          // heightAt / normalAt's triangles
+EcologyTerrain layered = TerrainEcology.of(surface, 2, terrain::layers);        // and its layers as substrate
+```
+
+The altitude is effects-terrain's `heightAt` plus the curvature's fall (the climate follows the altitude above sea
+level), plants stand at `heightAt`; `layers` (rock, grass, scree, snow) become rock, soil, scree and snow, so
+`vegetation` (the grass layer) is the soil plants root in. Without layers the ecology works the ground out itself.
+
+### Conditions at a location (`Site`)
+
+| Input | How | Source |
+|---|---|---|
+| **Temperature** | the growing season's mean: sea-level value minus 0.6 degrees per 100 m, plus the aspect's warming (`Climate`) | lapse rate: Rolland 2003 (0.54-0.58 per 100 m in the Alps); treeline at 6.4 degrees: Koerner and Paulsen 2004, Koerner 2012 |
+| **Aspect, insolation** | clear-sky beam and diffuse sky on the slope over the sun's paths at the latitude, mid-April to mid-October, relative to level ground (`Insolation`); 2.5 degrees per unit, so a 25 degree south slope is 0.2 warmer and a north slope 0.6 colder than level ground | declination: Cooper 1969 |
+| **Hydrology** | Priority-Flood filling (lakes from its depth), multiple flow directions for the topographic wetness index `ln(a / tan slope)`, single (steepest) directions for channels, height above the nearest drainage, the nearest stream and river (`TerrainAnalysis`) | Barnes, Lehman and Mulla 2014; Quinn et al. 1991; Beven and Kirkby 1979; O'Callaghan and Mark 1984; Renno et al. 2008 (HAND) |
+| **Moisture** | Ellenberg's scale (1 dry to 12 in water): 5 at 600 m rising with altitude's precipitation, wetter with the wetness index and near drainage and under long snow, drier on sunny, exposed and stony ground | Ellenberg et al. 1991 |
+| **Rivers, wetlands, riparian ground** | open water where a river's channel (2 km2 and up; 3 m wide per square-root square kilometre) or a filled hollow is; wetland where moisture reaches 8 to 9.2 on ground flatter than 4 degrees; a riparian band along streams, wider (8 m + 6 m per root km2) and higher above the channel (3 m + 0.1 per root km2) with the catchment | fens, mires, floodplains: Delarze et al. 2015 |
+| **Snow** | days of cover a year from the temperature (Swiss stations: about 40 days in the lowlands, 165 at Davos, 255 at Weissfluhjoch, all year near 2900 m), fewer on exposed ridges, more in hollows; or the terrain's own (`snowDays`: effects-weather's) | Laternser and Schneebeli 2003 |
+| **Wind exposure** | the topographic position index over 150 m, 40 m above the neighbourhood fully exposed | Weiss 2001 |
+| **Substrate** | the terrain's layers, else rock on slopes from 38 to 52 degrees, scree on steep and on frost-shattered ground above the alpine meadows, snow where it lies all year | |
+| **Land use** | optionally meadows kept open below 1850 m on slopes under 26 degrees, forest left in patches and on steep ground, orchards in them where apples grow | |
+| **Belt** | colline, montane, subalpine, alpine, nival, bounded at 800, 1500, 2200 and 3000 m of level ground as temperatures, so aspect shifts them | Ozenda 1985; Ellenberg and Leuschner 2010 |
+
+Every field is a pure function of the point: the analysis runs in world-aligned 2 km blocks with 2 km margins (8 m
+samples), each block's fields bilinearly blended into its neighbours', so a tile's conditions never depend on which
+tiles came before. A block takes about a second (its heights sampled on all cores); the 16 kept take about 265 MB.
+
+### Species (`AlpineSpecies`)
+
+34 species in six layers, each with an envelope (smooth trapezoids over temperature, moisture and snow days; tolerances
+of wind exposure and substrate; a liking for riparian ground) and a habit (height, crown, competitive weight, groves
+and clumps, krummholz), with their Ellenberg indicator values (light, temperature, moisture, reaction) and the source
+of each envelope in the code:
+
+| Layer | Species (ids) |
+|---|---|
+| canopy | `spruce` `fir` `larch` `stone-pine` `pine` `beech` `oak` `birch` `rowan` `apple` `ash` `alder` |
+| shrubs | `willow` `green-alder` `hazel` `elder` `dog-rose` `mugo` |
+| dwarf shrubs | `alpenrose` `blueberry` `lingonberry` |
+| herbs | `gentian` `arnica` `alpine-aster` `edelweiss` `buttercup` `clover` `marsh-marigold` `sedge` `cotton-grass` `rush` |
+| grass, ground | `grass`; `moss` (Sphagnum), `lichen` |
+
+Temperature envelopes follow the belts (Ozenda 1985; Ellenberg and Leuschner 2010; Landolt 2003) through the default
+climate (800 m is 14.2 degrees, 1500 m 10.0, 2200 m 5.8, 3000 m 1.0): oak and apple colline, beech colline-montane,
+fir montane, spruce montane to the treeline (6.4 degrees, about 2100 m on level ground), larch and stone pine slightly
+above it, mountain pine krummholz, alpenrose and the dwarf shrubs higher, gentian, alpine aster and edelweiss alpine,
+lichens nival. Moisture ranges centre on the Ellenberg moisture value (Ellenberg et al. 1991), wide where a species is
+indifferent; wetland species (sedges, cotton grass, marsh marigold, Sphagnum) take 8.5 to 10.5. The light value sets
+the light a species needs under taller layers (about 2 % of daylight at 1, 10 % at 5, 50 % at 9). The indicator values
+are Ellenberg's for central Europe as transcribed; for the Alpine specialists (mountain and stone pine, green alder,
+alpenrose, gentian, alpine aster, edelweiss) they are approximate. Ids are common-procedural's tree presets and the
+flora's (`rowan elder dog-rose apple blueberry lingonberry alpenrose gentian arnica alpine-aster edelweiss buttercup
+clover grass`); the others have no generator yet and are placed all the same, for a renderer to draw them or a
+stand-in.
+
+### Communities, the treeline, placement
+
+- **Suitability** multiplies a species' responses (temperature, moisture, snow, exposure, substrate, water, riparian).
+- **Layers** fill tallest first: a layer's cover is its best species' suitability, shared among its species by weight
+  times suitability cubed (the best suited dominate, ecotones mix) times a noise per species for groves and clumps;
+  lower layers get the light the canopy's and the shrubs' cover leaves.
+- **The treeline is an ecotone:** density falls as the temperature nears a tree's cold limit, size falls over a range a
+  degree wider (so trees shrink before they thin out), stems thin with size, and trees able to (spruce, larch, stone
+  pine) grow as krummholz, low and wide, when small; mountain pine and alpenrose take over above.
+- **Placement** (instances for trees, shrubs, dwarf shrubs and herb clumps; grass and ground as fields): a jittered
+  candidate per world cell of each layer (4, 2.5, 2 and 2.5 m), each candidate's random numbers derived from the seed and
+  its cell, kept by its layer's cover, given a species by the abundances and a size from the size field. Then an
+  iterated hard-core thinning (Matern's type II, a few rounds): candidates rank by layer, crown and a random priority,
+  and one falls when a stronger one still standing is within reach, the radii of a layer added, a taller plant's crown
+  counting only as far as the lower plant does not bear its shade. Every plant's fate depends only on candidates within
+  a fixed halo, so a tile, a region, or any order of tiles gives exactly the same plants, and each plant belongs to
+  exactly one tile.
+
+### Outputs (`EcologyTile`)
+
+- **Fields**, every `cell` metres with the tile's edges (neighbours share their edge samples exactly): per species
+  abundance (its share of its layer's ground, 0 to 1: densities for grass fields), size and suitability; ground cover
+  (`MEADOW`, `FOREST_FLOOR`, `HEATH`, `SCREE`, `ROCK`, `SNOW`, `WETLAND`, `WATER`, summing to 1) for effects-terrain's
+  material; the conditions (altitude, temperature, moisture, snow days, insolation, exposure, wetness, HAND, water,
+  wetland, riparian, meadow, canopy cover, slope, wet soil, belt): `WATER` and `WET_SOIL` are hints for a water
+  renderer and darker, glossier ground.
+- **Instances** (`Instances`): position (on the terrain's height), yaw, height and width scale relative to the
+  species' grown plant (wider than high as krummholz), species, variant seed, age and health, for effects-vegetation to
+  scatter and draw.
+
+### As an asset
+
+`.ecology` recipe files load through the asset manager like the trees' recipes (`EcologyAssets.install(paths)`, type
+`EcologyAssets.ECOLOGY`), and give the same ecology as the direct API (tested):
+
+```
+# game://ecology/lauterbrunnen.ecology
+seed = 7
+latitude = 46.6
+temperature = 19.0              # the growing season's mean at sea level
+lapse = 0.006
+meadows = true
+species = spruce fir larch beech hazel mugo alpenrose blueberry gentian arnica grass
+weight.beech = 1.4
+model.spruce = game://forest/spruce-a.tree         # what each species' instances draw
+model.gentian = game://flora/gentian.plant
+```
+
+`EcologyAssets.models(paths, recipe)` gives each species' model reference.
+
+### Tested (each fails without its feature)
+
+- **Belts on a synthetic slope, shifted by aspect:** up a 25 degree plane the belts change at their altitudes, beech
+  and oak low, beech with fir and spruce montane, spruce subalpine, larch at the treeline, dwarf shrubs and krummholz
+  above, alpine grassland with gentians, nothing on snow-covered nival ground; the south slope's treeline (cover below
+  0.1) and alpine belt lie 80 to 400 m above the north slope's.
+- **The treeline gradient:** the canopy's cover changes by less than 0.06 per 5 m from 1700 to 2400 m; trees placed in
+  100 m bands from 1850 m get fewer and smaller band by band, the ecotone's band has trees of intermediate size, the
+  last none, and some grow as krummholz.
+- **Wetness index on a known valley:** V-shaped sides rising 0.4 to divides 1500 m out drain in parallel, so the
+  index is `ln((1500 - x) / tan)`: matched within 0.15 from 200 to 1300 m; HAND is 0.4 x; the thalweg is a stream.
+- **Wetlands and the riparian band:** in a meandering U-shaped valley the riparian band follows the channel (above 0.5
+  beside it, under 0.1 150 m away on either side) and the river is open water; wetlands only where the ground is flatter
+  than 4 degrees and moisture is 8 or more; sedges, cotton grass, marsh marigold in them, alder and willow by the
+  river.
+- **Spacing:** no two plants of a layer closer than their radii added, none under a taller crown it cannot bear, and
+  shade-tolerant plants under the trees.
+- **Streaming determinism:** four tiles in one order and in reverse on another ecology (a smaller block cache, so blocks
+  are analysed again) give identical plants and fields; the four together hold exactly the plants of the region they
+  cover; shared edge samples are equal.
+- **Recipe asset path equals direct API:** an `.ecology` file through the real asset cache gives identical tiles.
+- Also: ground cover sums to 1, meadows halve the forest on gentle slopes, insolation, ranges, climate, recipes' errors;
+  effects-terrain's adapter (heights, layers) and, where its cache holds Lauterbrunnen, the Weisse Luetschine on the
+  valley floor with riparian ground by it and the cliffs bare.
+
+### Benchmark
+
+`LauterbrunnenBenchmark` (`TRUESIM_BENCHMARK=true ./gradlew :common-procedural-ecology-terrain:test --tests
+'*LauterbrunnenBenchmark'`): Lauterbrunnen's near area from effects-terrain's cache (swissALTI3D at 2 m with
+effects-terrain's surface detail), 2 by 2 km round the church: the valley floor, the cliffs and both sides to about
+1500 m, in 256 m tiles with 4 m fields, meadows kept open, every instance layer. A 32-thread desktop CPU, JDK 27,
+2026-11-08, the second of two rounds after a warm-up:
+
+| | per km2 |
+|---|---|
+| terrain analysis (12 blocks of 2 km with their margins, shared by all tiles of a block; heights on all cores) | 0.83 s for the area's blocks |
+| tiles (fields and placement), one thread | 0.98 s |
+| tiles, 32 threads | 0.27 s |
+| plants placed | 10,593 trees, 6,019 shrubs, 31,466 dwarf shrubs, 20,698 herb clumps |
+
+So a 256 m tile costs about 64 ms on one thread once its block is analysed; streaming at a walk or a drive is far
+within one core. Fields alone (no instances) are several times cheaper: the maps' 8 by 8 km at 8 m took a few seconds
+on all cores.
+
+### Pictures and films
+
+Two films (1280 x 720, 30 frames a second) of Lauterbrunnen, made from effects-terrain's cache:
+
+- **Map views** (`LauterbrunnenMaps`, `TRUESIM_PICTURES=true ./gradlew :common-procedural-ecology-terrain:test --tests
+  '*LauterbrunnenMaps' -Ppictures=<dir>`; frames, then `ffmpeg -framerate 0.4 -i map%03d.png -vf fps=30 ...`): 8 by 8
+  km from the Schilthorn to Wengen over hillshade: belts, temperature, insolation, snow, wetness index, exposure,
+  moisture, rivers with riparian ground and wetlands, ground cover, the dominant canopy, the valley floor closer
+  (hydrology, ground cover, canopy along the Weisse Luetschine), then every species' abundance.
+- **A flight up the valley side** (`EcologyFlight` in `preview`, `TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true
+  -Ptruesim.engine=../engine-vegetation :preview:test --tests '*EcologyFlight*'`): from the floor by the river over the
+  cliffs and the Muerren terrace to the Schilthorn, turning east to the Jungfrau: the terrain coloured by the ecology's
+  ground cover, 364,000 trees and shrubs placed by it within a kilometre of the path, drawn by common-procedural's trees
+  as stand-ins (no vegetation renderer yet: stone pine as pine, oak, ash and apple as beech, rowan and alder as birch,
+  willow, green alder, elder and dog rose as hazel), levels of detail by distance, billboards casting no shadows. Dwarf
+  shrubs, herbs and grass show only in the ground's colour. `TRUESIM_SCREENSHOTS=true` draws four stills of it on a
+  validated device (clean under GPU-assisted validation).
+
+Judged against photographs of the valley: the belts sit where they do there (spruce forest on the flanks, larch at the
+upper edge, open alpine pastures above about 2000 m, rock and snow at the Schilthorn), the valley floor is meadow with
+forest patches, the cliffs mostly bare. What does not look real: the ground is coloured, not textured (meadows read
+as flat khaki, cliffs as smooth grey), there is no aerial perspective (the far mountains are as sharp and saturated
+as the near ones), the stand-in trees repeat (two variants a preset) and a few stand on the cliffs where photographs
+show bare rock, and nothing grows below the trees but the colour.
+
+### What it does not do (yet)
+
+- Shadows of the surrounding terrain on the insolation (a deep valley's floor gets less sun than its slope alone says).
+- Avalanches (tracks keep green alder and grass where trees would stand), grazing beyond the meadows' rule, settlements.
+- Hydrology across block margins: a catchment is cut 2 km beyond its block, so a big river's catchment, and so its
+  width, is underestimated far from its source; flat valley floors drain in braids (the data's levees and ditches).
+- Calcareous against siliceous ground (alpine aster and edelweiss on limestone, alpenrose on acid soils): no bedrock
+  input yet.
+
 ## Tests
 
 `./gradlew build` runs them all (with 80 % line and branch coverage, the platform-independence and allocation checks):
@@ -273,7 +482,7 @@ TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-v
 
 Films (1280 x 720, 30 frames a second): a turntable of every species, a small forest in rising wind, the levels of
 detail side by side (spruce and beech: levels 0-2 and the billboard), the seasons (larch through the year, a spruce
-under snow).
+under snow), and the ecology's flight up Lauterbrunnen's side (see [Ecology](#pictures-and-films)).
 
 ## Roadmap
 
@@ -296,7 +505,10 @@ Trees and rocks are in. Next, each an issue:
 
 Uses `../build-logic`, `../common-math`, `../common-jobs` and `../scene` automatically when checked out next to this
 repository (override with `-Ptruesim.<repo>=<path>`, or `false`), or fetches them from GitHub Packages (see
-build-logic's README for credentials).
+build-logic's README for credentials). effects-terrain (for the ecology's adapter) is always fetched: its own build
+includes the engine's. The Lauterbrunnen tests, benchmark and maps read effects-terrain's cache
+(`-Ptruesim.terrain.cache=<dir>`, else `../effects-terrain/terrain-cache`, filled by its `fetchTerrain`) and are skipped
+where it is empty.
 
 ## Licence
 
