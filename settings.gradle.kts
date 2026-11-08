@@ -36,7 +36,7 @@ include("common-procedural-assets")
 project(":common-procedural-assets").projectDir = file("assets")
 
 // Pictures and films through the engine, only with -Ptruesim.preview=true: the engine stays out of the library's build
-// (until per-material displacement is released, with -Ptruesim.engine=../engine-vegetation, its branch).
+// (engine 0.197.0 has per-material displacement: no branch needed).
 val preview = providers.gradleProperty("truesim.preview").orNull == "true"
 if (preview) {
     include("preview")

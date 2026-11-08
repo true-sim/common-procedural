@@ -20,6 +20,8 @@ public final class SoftwareRender {
     private final int height;
     private final float[] depth;
     private final int[] color;
+    private final int[] tag;
+    private int currentTag;
     // camera
     private double ex;
     private double ey;
@@ -35,6 +37,7 @@ public final class SoftwareRender {
         this.height = height;
         this.depth = new float[width * height];
         this.color = new int[width * height];
+        this.tag = new int[width * height];
     }
 
     /** Clears to a sky gradient and sets the camera at e looking at t, vertical field of view fov radians. */
@@ -58,12 +61,14 @@ public final class SoftwareRender {
             for (int x = 0; x < width; x++) {
                 color[y * width + x] = r << 16 | g << 8 | b;
                 depth[y * width + x] = Float.POSITIVE_INFINITY;
+                tag[y * width + x] = 0;
             }
         }
     }
 
     /** A ground plane at y 0, a grassy colour, out to {@code extent} metres. */
     public void ground(double extent) {
+        currentTag = -1;
         int tiles = 48;
         double step = 2 * extent / tiles;
         for (int i = 0; i < tiles; i++) {
@@ -137,6 +142,7 @@ public final class SoftwareRender {
                         com.truesim.common.procedural.flora.Palette.t(uvs[2 * a])).toSrgb();
                 }
                 flip = colored;
+                currentTag = sub + 1;
                 triangle(p, a, b, d, base, nn, 0, 0, 0, a, b, d, 0, 0, 0, leaves ? uvs : null, 0, 0, 0);
                 flip = false;
             }
@@ -222,6 +228,7 @@ public final class SoftwareRender {
                 int bl = Math.min(255, (int) ((base & 255) * light));
                 depth[pixel] = (float) z;
                 color[pixel] = r << 16 | g << 8 | bl;
+                tag[pixel] = currentTag;
             }
         }
     }
@@ -237,6 +244,34 @@ public final class SoftwareRender {
         double x = dx * right[0] + dy * right[1] + dz * right[2];
         double y = dx * up[0] + dy * up[1] + dz * up[2];
         return new double[] {width / 2.0 + focal * x / z, height / 2.0 - focal * y / z, z};
+    }
+
+    /** Pixels whose nearest surface is submesh {@code submesh} of a drawn mesh (-1: none of them, the ground's). */
+    public int pixels(int submesh) {
+        int n = 0;
+        for (int t : tag) {
+            n += t == submesh + 1 ? 1 : 0;
+        }
+        return n;
+    }
+
+    /** Pixels covered by any drawn mesh (not sky, not ground). */
+    public int covered() {
+        int n = 0;
+        for (int t : tag) {
+            n += t > 0 ? 1 : 0;
+        }
+        return n;
+    }
+
+    /** The color at a pixel, 0xRRGGBB. */
+    public int rgb(int x, int y) {
+        return color[y * width + x];
+    }
+
+    /** The submesh (plus one) seen at a pixel: 0 sky, -1 ground. */
+    public int tag(int x, int y) {
+        return tag[y * width + x];
     }
 
     public BufferedImage image() {

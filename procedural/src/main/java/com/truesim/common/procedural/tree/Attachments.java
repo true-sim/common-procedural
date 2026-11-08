@@ -29,6 +29,11 @@ import java.util.Arrays;
 final class Attachments {
 
     private static final int MAX_FLOWERS = 512;
+    /**
+     * Sites keep to the crown's outer shell: from this fraction of the way out from its centre to its envelope. Fruit
+     * and flowers are borne on the sunlit outer shoots; inside the crown they would only hide behind the leaves.
+     */
+    static final double SHELL = 0.6;
     private static final Vec3 UP = Axes.UP;
 
     // Sites: the node, the position and the shoot's direction there, a hash
@@ -38,6 +43,12 @@ final class Attachments {
     private double[] data = new double[6 * 256];
 
     private final FloralState state = new FloralState();
+    // the crown's centre and its envelope's half sizes, for the shell and for turning heads outward
+    private double centreX;
+    private double centreY;
+    private double centreZ;
+    private double halfWidth = 1;
+    private double halfHeight = 1;
     private final FloraWriter flora = new FloraWriter();
     private final FloraSummary.Builder summary = new FloraSummary.Builder();
     // Per flower of the site being meshed
@@ -70,10 +81,21 @@ final class Attachments {
     }
 
     /** Places the sites of {@code fruiting} on the skeleton's twigs (none for {@code null}). */
-    void place(Skeleton skeleton, Fruiting fruiting, double height, Rng rng) {
+    void place(Skeleton skeleton, Fruiting fruiting, double height, Vec3 crown, Rng rng) {
         count = 0;
         if (fruiting == null || fruiting.density() <= 0) {
             return;
+        }
+        centreX = crown.x();
+        centreY = crown.y();
+        centreZ = crown.z();
+        halfWidth = 1e-6;
+        halfHeight = 1e-6;
+        for (int n = 0; n < skeleton.nodeCount(); n++) {
+            double dx = skeleton.x(n) - centreX;
+            double dz = skeleton.z(n) - centreZ;
+            halfWidth = Math.max(halfWidth, Math.sqrt(dx * dx + dz * dz));
+            halfHeight = Math.max(halfHeight, Math.abs(skeleton.y(n) - centreY));
         }
         double low = fruiting.minHeight() * height;
         for (int b = 0; b < skeleton.branchCount(); b++) {
@@ -126,15 +148,35 @@ final class Attachments {
         }
     }
 
+    /** How far out {@code p} lies, 0 at the crown's centre, 1 on its envelope (an ellipsoid). */
+    double outer(Vec3 p) {
+        double dx = (p.x() - centreX) / halfWidth;
+        double dy = (p.y() - centreY) / halfHeight;
+        double dz = (p.z() - centreZ) / halfWidth;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /** The unit direction out of the crown at {@code p}: away from its centre, level. */
+    private Vec3 outward(Vec3 p) {
+        double dx = p.x() - centreX;
+        double dz = p.z() - centreZ;
+        double l = Math.sqrt(dx * dx + dz * dz);
+        return l > 1e-9 ? new Vec3(dx / l, 0, dz / l) : Vec3.UNIT_X;
+    }
+
     @AllowAllocation("growing, until warm")
     private void add(Skeleton skeleton, int at, Vec3 p, Vec3 direction, Rng rng) {
+        int h = rng.nextInt();
+        if (outer(p) < SHELL) {
+            return; // inside the crown
+        }
         if (count == node.length) {
             node = Arrays.copyOf(node, 2 * count);
             hash = Arrays.copyOf(hash, 2 * count);
             data = Arrays.copyOf(data, 12 * count);
         }
         node[count] = at;
-        hash[count] = rng.nextInt();
+        hash[count] = h;
         int o = 6 * count;
         data[o] = p.x();
         data[o + 1] = p.y();
@@ -272,7 +314,9 @@ final class Attachments {
         double meanAge = blooming > 0 ? ages / blooming : 0.5;
         double droop = inflorescence.fruitDroop() * fruits / (double) k * (fruits > 0 ? fruitSize / fruits : 0);
         Vec3 site = position(i);
-        Vec3 axis = FloraWriter.sink(FloraWriter.turn(direction(i), UP, inflorescence.erect()), droop);
+        // held out of the crown and up (corymbs stand on their shoots), sinking under fruit
+        Vec3 out = FloraWriter.turn(direction(i), outward(site), 0.5);
+        Vec3 axis = FloraWriter.sink(FloraWriter.turn(out, UP, inflorescence.erect()), droop);
         Vec3 reference = FloraWriter.around(axis, Maths.TAU * Hash.random(h, 2));
         Vec3 across = axis.cross(reference);
         wind.applyNode(writer, node[i], 0);
@@ -418,14 +462,14 @@ final class Attachments {
             ? fruiting.fruit().radius() : 0.8 * fruiting.flower().reach());
         double scale = Math.sqrt(shown / (double) florets) * grown / shown;
         if (blooming >= fruits) {
-            FruitShape dome = new FruitShape(FruitShape.Form.BERRY, radius, 0.4, 0, 0, 0, 0, 0);
+            FruitShape dome = new FruitShape(FruitShape.Form.BERRY, radius, 0.6, 0, 0, 5, 0, 0);
             flora.frame(at.addScaled(facing, -0.25 * radius), facing, across)
-                .fruit(dome, scale, ages / blooming, Part.PETAL, 2, seed);
+                .fruit(dome, scale, ages / blooming, Part.PETAL, 1, seed);
         } else {
             FruitShape fruit = fruiting.fruit();
-            FruitShape blob = new FruitShape(FruitShape.Form.BERRY, radius, 0.9, 0, 0, 0, 0, 0);
+            FruitShape blob = new FruitShape(FruitShape.Form.BERRY, radius, 0.9, 0, 0, 5, 0, 0);
             Vec3 down = FloraWriter.sink(facing, fruit.hang() * Maths.acos(Math.clamp(-facing.y(), -1, 1)));
-            flora.frame(at, down, across).fruit(blob, scale, ripe / fruits, fruitPart, 2, seed);
+            flora.frame(at, down, across).fruit(blob, scale, ripe / fruits, fruitPart, 1, seed);
         }
     }
 
@@ -438,15 +482,17 @@ final class Attachments {
             ? inflorescence.pedicel() * Maths.sin(inflorescence.spread()) : inflorescence.spread();
         Vec3 top = site.addScaled(axis, inflorescence.peduncle() + 0.6 * inflorescence.pedicel());
         if (blooming >= fruits) {
-            FruitShape dome = new FruitShape(FruitShape.Form.BERRY, spread + 0.7 * reach, 0.3, 0, 0, 0, 0, 0);
+            // lumpy: its florets read in the outline
+            FruitShape dome = new FruitShape(FruitShape.Form.BERRY, spread + 0.7 * reach, 0.55, 0, 0, 7, 0, 0);
             flora.frame(top.addScaled(axis, -0.3 * dome.radius()), axis, reference)
-                .fruit(dome, 1, meanAge, Part.PETAL, detail, h);
+                .fruit(dome, 1, meanAge, Part.PETAL, 1, h);
         } else {
             FruitShape fruit = fruiting.fruit();
-            FruitShape blob = new FruitShape(FruitShape.Form.BERRY, 0.7 * spread + fruit.radius(), 0.9, 0, 0, 0, 0, 0);
+            // a bunch: lumpy with its berries
+            FruitShape blob = new FruitShape(FruitShape.Form.BERRY, 0.7 * spread + fruit.radius(), 0.9, 0, 0, 7, 0, 0);
             Vec3 down = FloraWriter.sink(axis, fruit.hang() * Maths.acos(Math.clamp(-axis.y(), -1, 1)));
             flora.frame(top, down, reference).fruit(blob, Math.sqrt(fruits / (double) Math.max(fruits + blooming, 1)),
-                meanRipe, fruitPart, detail, h);
+                meanRipe, fruitPart, 1, h);
         }
     }
 

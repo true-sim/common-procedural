@@ -185,7 +185,11 @@ byte[] palette = laden.palette().texels();   // the attachments' base color text
 - **Where** (`Fruiting.Placement`): at twig tips (roses, alpenrose's trusses, spruce cones), or along the outer part
   of shoots, off to their sides (apple spurs, rowan's and elder's heads on their short side shoots, blueberry
   flowers, larch cones), with a density (a chance per tip, a number per metre), from a branch level, above a height
-  (spruce and fir cone high in the crown). Sites are
+  (spruce and fir cone high in the crown). Sites keep to the crown's outer shell (from 0.6 of the way out from its
+  centre to its envelope): fruit and flowers are borne on the sunlit outer shoots, and heads turn out of the crown,
+  so from a distance they show as on real trees rather than hiding behind the leaves. Densities are set so a tree
+  shows about as much as a real one: a rowan in fruit about 800 bunches of 40 to 80 berries, an apple tree about a
+  thousand apples, a dog rose several hundred flowers. Sites are
   drawn from the seed, the same on every day, so a flower is the same flower from bud to fruit.
 - **How** (`Inflorescence`): solitary, a cluster on equal stalks (apple, alpenrose), an umbel to a dome (elder), a
   corymb to a flat top, branching partway out (rowan), a raceme along an axis (lingonberry); compound heads carry
@@ -232,7 +236,12 @@ byte[] palette = laden.palette().texels();   // the attachments' base color text
   color), 3 none. Tiny flowers (under 8 mm across) are drawn simply at every level. Every level stays within its
   triangle budget, flowers and fruits included: over it, the level simplifies and merges them first, then thins leaf
   cards and twigs; only when even that leaves no room are they dropped (and the thinning starts over). Its error
-  counts what was merged or dropped. With the default near budget (90,000) a flowering rowan's or elder's near level
+  counts what was merged or dropped. Merged heads are lumpy domes and bunches (their florets and berries read in
+  the outline) in the head's mean color, so far levels keep a tree's blossom or crop.
+- **Seen from afar** (tested): drawn from 40 m, a rowan in fruit shows red over at least 8 % of its crown's pixels
+  (more than 10 % of them its attachments), in flower 8 %, an apple tree in fruit red over 3.5 % and in blossom 5 %, a
+  dog rose in flower 4 %, in hips 2 %; before the outer shell and these densities, a rowan showed 4.5 % and a dog rose
+  0.5 %. With the default near budget (90,000) a flowering rowan's or elder's near level
   draws merged florets; the films' close-ups raise it to 400,000 to show every flower.
 - **Far away**: the billboard's capture and an impostor bake draw the most detailed level, attachments included;
   `ImpostorHints.bloom()` and `bloomCoverage()` give the attachments' mean albedo and the share of the side view they
@@ -546,7 +555,7 @@ Two films (1280 x 720, 30 frames a second) of Lauterbrunnen, made from effects-t
   moisture, rivers with riparian ground and wetlands, ground cover, the dominant canopy, the valley floor closer
   (hydrology, ground cover, canopy along the Weisse Luetschine), then every species' abundance.
 - **A flight up the valley side** (`EcologyFlight` in `preview`, `TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true
-  -Ptruesim.engine=../engine-vegetation :preview:test --tests '*EcologyFlight*'`): from the floor by the river over the
+  -Ptruesim.engine=false :preview:test --tests '*EcologyFlight*'`): from the floor by the river over the
   cliffs and the Muerren terrace to the Schilthorn, turning east to the Jungfrau: the terrain coloured by the ecology's
   ground cover, 364,000 trees and shrubs placed by it within a kilometre of the path, drawn by common-procedural's trees
   as stand-ins (no vegetation renderer yet: stone pine as pine, oak, ash and apple as beech, rowan and alder as birch,
@@ -667,12 +676,12 @@ The `preview` module renders generated assets with the engine's renderer (a test
 library never depends on the engine. Its minimal tree material (`proceduralTree.slang`) shades as metallic-roughness
 and sways by the wind format in `displace()` (the engine's per-material displacement), driven by its geometry hook
 `procedural.wind`. Leaf atlases, bark and the billboard capture are drawn on the CPU (`Looks`) until procedural textures
-(#5) exist. Until the engine releases per-material displacement, build it against that branch:
+(#5) exist. It builds against the released engine (0.197.0, with per-material displacement):
 
 ```bash
-TRUESIM_SCREENSHOTS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-vegetation :preview:test   # stills
-TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-vegetation :preview:test        # films
-TRUESIM_FLORA_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-vegetation :preview:test  # flora
+TRUESIM_SCREENSHOTS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :preview:test   # stills
+TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :preview:test        # films
+TRUESIM_FLORA_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :preview:test  # flora
 ```
 
 Films (1280 x 720, 30 frames a second): a turntable of every species, a small forest in rising wind, the levels of
@@ -682,7 +691,10 @@ under snow), and the ecology's flight up Lauterbrunnen's side (see [Ecology](#pi
 year) side by side; a rowan and an apple tree through the year, from April to the next March in steps of four days
 (snow on the ground and the boughs in winter); a patch of meadow flowers and grass clumps in rising wind. Attachments
 and plants use a two-sided palette material (`Stage.paletteMaterial`) reading the palette texture, swaying by the
-same wind format.
+same wind format (blades fluttering a millimetre, not the leaf cards' centimetres). The flora films tone map with
+Khronos PBR Neutral, which keeps an albedo's hue and saturation (`FloraFilms.colourChart` draws the flora's albedos
+through AgX and PBR Neutral: AgX at the stage's exposure washes rowan red to salmon and arnica to beige). A group of
+rowans, apple trees and dog roses from 50 m (`groupFromFiftyMetres`), in flower and in fruit.
 
 ## Roadmap
 

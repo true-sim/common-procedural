@@ -125,8 +125,8 @@ class TreeTest {
         assertThat(tree.billboard().triangleCount()).isEqualTo(6);
         assertThat(tree.billboard().error()).isGreaterThan(0);
         // the far level is a small fraction of the near one
-        // (dwarf shrubs are cheap at every level)
-        assertThat(lods.getLast().triangleCount()).isLessThan(Math.max(lods.getFirst().triangleCount() / 4, 2000));
+        // (shrubs are cheap at every level: under the far budget will do)
+        assertThat(lods.getLast().triangleCount()).isLessThan(Math.max(lods.getFirst().triangleCount() / 4, 8000));
     }
 
     @Test

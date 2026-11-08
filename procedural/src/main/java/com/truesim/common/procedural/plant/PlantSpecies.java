@@ -129,7 +129,7 @@ public record PlantSpecies(String name, double height, double heightVariation, d
      * A meadow grass clump (after Festuca and Poa of Alpine meadows): arching blades, culms with spike-like panicles
      * flowering in June, ripening to straw in July and August; the blades straw-brown from October.
      */
-    public static final PlantSpecies GRASS = new PlantSpecies("grass", 0.45, 0.25, 0.04, 3, 8, 0.3, 0.25, 0.0012, 0,
+    public static final PlantSpecies GRASS = new PlantSpecies("grass", 0.45, 0.25, 0.04, 1, 4, 0.3, 0.25, 0.0012, 0,
         new LeafSpec(45, 70, 0.26, 0.004, Outline.BLADE, 0.95, -1.5, 0.35, 1, 0),
         new LeafSpec(1, 1, 0.1, 0.003, Outline.BLADE, 0.5, -0.5, 0.3, 1, 0),
         null, new FruitShape(FruitShape.Form.SPIKE, 0.003, 7, 0.15, 0, 9, 0, 0), 0.2,

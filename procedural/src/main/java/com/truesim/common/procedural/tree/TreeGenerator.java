@@ -61,7 +61,7 @@ public final class TreeGenerator {
         snow(species.snowDroop() * options.snowLoad() + crop);
         Vec3 crown = new Vec3(0, height * (1 + species.crownBase()) / 2, 0);
         LeafPlacement.place(skeleton, species.foliage(), crown, Rng.seeded(Seeds.derive(seed, 2)));
-        attachments.place(skeleton, fruiting, height, Rng.seeded(Seeds.derive(seed, 3)));
+        attachments.place(skeleton, fruiting, height, crown, Rng.seeded(Seeds.derive(seed, 3)));
         boolean alt = (Seeds.derive(seed, 4) & 1) != 0; // the second cultivar's fruit color
         skeleton.pipeRadii(species.pipeExponent(), species.baseRadius() * height / species.height());
         wind.compute(skeleton, seed);

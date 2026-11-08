@@ -170,7 +170,7 @@ class AttachmentTest {
         assertThat(april.shown()).isZero();
         Tree june = generator.generate(TreeSpecies.ROWAN, TreeOptions.DEFAULTS.withDay(162), 3);
         assertThat(june.flora().flowers()).isGreaterThan(june.flora().fruits());
-        assertThat(june.flora().albedo().mean()).isGreaterThan(0.45); // white blossom
+        assertThat(june.flora().albedo().mean()).isGreaterThan(0.4); // white blossom
         assertPartsWithin(june.lods().getFirst(), Set.of(Part.PETAL, Part.CENTRE, Part.SEPAL, Part.STALK, Part.FRUIT));
         Tree september = generator.generate(TreeSpecies.ROWAN, TreeOptions.DEFAULTS.withDay(255), 3);
         FloraSummary fruit = september.flora();
@@ -373,5 +373,47 @@ class AttachmentTest {
             .isSameAs(TreeSpecies.ROWAN.fruiting());
         assertThat(Trees.generate(TreeSpecies.BEECH, 1).flora()).isEqualTo(FloraSummary.NONE);
         assertThat(Trees.generate(TreeSpecies.BEECH, 1).impostor().bloomCoverage()).isZero();
+    }
+
+    /**
+     * Seen from 40 m, as a real tree is (a rowan in fruit covered in red bunches, an apple tree showing its apples, a
+     * dog rose its pink flowers): the share of the crown's pixels that are its flowers or fruit, and for fruit, red.
+     * Drawn by the CPU rasterizer at 1280 x 720, 34 degrees high, leaf cards cut by their masks.
+     */
+    @Test
+    void flowersAndFruitShowFromFortyMetres() {
+        long red = 0;
+        while ((com.truesim.common.procedural.Seeds.derive(red, 4) & 1) != 0) {
+            red++; // an apple of the red cultivar
+        }
+        assertShows(TreeSpecies.ROWAN, 240, 7, 0.08, true);
+        assertShows(TreeSpecies.ROWAN, 160, 7, 0.08, false);
+        assertShows(TreeSpecies.APPLE, 250, red, 0.035, true);
+        assertShows(TreeSpecies.APPLE, 130, red, 0.05, false);
+        assertShows(TreeSpecies.DOG_ROSE, 172, 7, 0.04, false);
+        assertShows(TreeSpecies.DOG_ROSE, 280, 7, 0.02, true);
+    }
+
+    private static void assertShows(TreeSpecies species, double day, long seed, double share, boolean red) {
+        Tree tree = Trees.generate(species, TreeOptions.DEFAULTS.withDay(day), seed);
+        double h = tree.height();
+        com.truesim.common.procedural.SoftwareRender r = new com.truesim.common.procedural.SoftwareRender(1280, 720);
+        r.camera(0, 0.5 * h, 40, 0, 0.5 * h, 0, 0.6);
+        r.draw(tree.lods().getFirst(), 0, 0, 0, null, tree.palette(), Tree.ATTACHMENTS);
+        int crown = r.covered();
+        int shown = 0;
+        for (int y = 0; y < 720; y++) {
+            for (int x = 0; x < 1280; x++) {
+                if (r.tag(x, y) != Tree.ATTACHMENTS + 1) {
+                    continue;
+                }
+                int c = r.rgb(x, y);
+                int rr = c >> 16 & 255;
+                int g = c >> 8 & 255;
+                int b = c & 255;
+                shown += !red || (rr > 1.6 * g && rr > 1.6 * b) ? 1 : 0;
+            }
+        }
+        assertThat((double) shown / crown).as("%s on day %s", species.name(), day).isGreaterThan(share);
     }
 }

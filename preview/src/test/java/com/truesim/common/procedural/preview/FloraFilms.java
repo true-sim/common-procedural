@@ -20,6 +20,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import javax.imageio.ImageIO;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +41,12 @@ class FloraFilms {
     private static final int WIDTH = 1280;
     private static final int HEIGHT = 720;
     private static final int SUPER = 2;
+    /**
+     * The tone curve of these films: Khronos PBR Neutral keeps the hue and saturation of an albedo (a rowan berry's
+     * orange-red, arnica's yellow); AgX, the stage's default, washes them to pastels at this exposure (the colour
+     * chart, {@link #colourChart}, shows both).
+     */
+    static final String NEUTRAL = System.getenv().getOrDefault("TRUESIM_FLORA_CURVE", "pbr_neutral");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH);
 
     private VulkanInstance instance;
@@ -132,7 +139,7 @@ class FloraFilms {
                 int a = ProceduralFilms.place(stage, left, 0, -apart, 0, 0);
                 int b = ProceduralFilms.place(stage, right, 0, apart, 0, 0);
                 double distance = 1.05 * (2 * apart + size) + 0.2;
-                stage.wind(ProceduralFilms.wind(2)).shade();
+                stage.wind(ProceduralFilms.wind(2)).curve(NEUTRAL).frontLit().shade();
                 String caption = title(species.name()) + "   left: " + date(bloom) + " in flower   right: "
                     + date(ripe) + " in fruit";
                 int frames = 150;
@@ -251,7 +258,7 @@ class FloraFilms {
                     }
                 }
                 double distance = 2.4 * (2 * apart + size);
-                stage.wind(ProceduralFilms.wind(3)).look(0, 0.55 * size, distance, 0, 0.35 * size, 0, 40).shade();
+                stage.wind(ProceduralFilms.wind(3)).look(0, 0.55 * size, distance, 0, 0.35 * size, 0, 40).curve(NEUTRAL).frontLit().shade();
                 String caption = title(species.name()) + "   left: " + date(bloom) + "   right: " + date(late);
                 int frames = 150;
                 for (int f = 0; f < frames; f++) {
@@ -320,7 +327,7 @@ class FloraFilms {
                         stage.look(distance * Math.sin(a), 0.45 * tree.height() + 0.6, distance * Math.cos(a), 0,
                             0.48 * tree.height(), 0, 45);
                         if (frame == 0) {
-                            stage.shade();
+                            stage.curve(NEUTRAL).frontLit().shade();
                         }
                         stage.frames(frame == 0 ? 4 : 1, 1 / 30.0);
                         write(stage.shot(), out, frame++, caption);
@@ -350,21 +357,24 @@ class FloraFilms {
     void meadowInWind() throws IOException {
         Path out = ProceduralFilms.folder("meadow-wind");
         double day = 192;
-        try (Stage stage = new Stage(device, WIDTH * SUPER, HEIGHT * SUPER, 60, 6)) {
+        try (Stage stage = new Stage(device, WIDTH * SUPER, HEIGHT * SUPER, 60,
+            com.truesim.engine.render.GeometryPool.Capacity.of(1 << 22, 1 << 18, 128), 1 << 14, 6)) {
+            // a sward: mostly grass, the flowers among it
             PlantSpecies[] mix = {PlantSpecies.GRASS, PlantSpecies.GRASS, PlantSpecies.GRASS, PlantSpecies.GRASS,
+                PlantSpecies.GRASS, PlantSpecies.GRASS, PlantSpecies.GRASS, PlantSpecies.CLOVER,
                 PlantSpecies.CLOVER, PlantSpecies.CLOVER, PlantSpecies.BUTTERCUP, PlantSpecies.BUTTERCUP,
                 PlantSpecies.ARNICA, PlantSpecies.ALPINE_ASTER, PlantSpecies.EDELWEISS, PlantSpecies.GENTIAN};
             List<List<PlacedPlant>> variants = new ArrayList<>();
             for (int s = 0; s < mix.length; s++) {
                 List<PlacedPlant> some = new ArrayList<>();
-                for (int v = 0; v < 4; v++) {
+                for (int v = 0; v < 3; v++) { // materials: two per plant, 128 in all
                     some.add(load(stage, Plants.generate(mix[s], PlantOptions.DEFAULTS.withDay(day), 100 * s + v),
                         0.07f));
                 }
                 variants.add(some);
             }
-            double[] points = new double[2 * 8000];
-            int count = Math.min(3900, PoissonDisc.sample(Rng.seeded(5), 7, 7, 0.11, 30, points));
+            double[] points = new double[2 * 16000];
+            int count = Math.min(15000, PoissonDisc.sample(Rng.seeded(5), 7, 7, 0.065, 30, points));
             Rng rng = Rng.seeded(6);
             for (int i = 0; i < count; i++) {
                 double x = points[2 * i] - 3.5;
@@ -376,7 +386,7 @@ class FloraFilms {
                 stage.place(p.meshes()[level], p.material(), x, z, rng.nextDouble() * 2 * Math.PI,
                     0.85 + 0.3 * rng.nextDouble());
             }
-            stage.shade();
+            stage.curve(NEUTRAL).frontLit().shade();
             int frames = 300;
             for (int f = 0; f < frames; f++) {
                 double t = f / 30.0;
@@ -413,9 +423,118 @@ class FloraFilms {
                     s.phenology().peakBloom()), 1), 0.07f);
                 stage.place(p.meshes()[0], p.material(), (i - 3) * 1.2, 9, 0, 3);
             }
-            stage.wind(ProceduralFilms.wind(3)).look(0, 7, 32, 0, 2.5, 0, 50).shade();
+            stage.wind(ProceduralFilms.wind(3)).look(0, 7, 32, 0, 2.5, 0, 50).curve(NEUTRAL).frontLit().shade();
             stage.frames(8, 1 / 30.0);
             ProceduralFilms.write(stage.shot(), out, 0);
+        }
+    }
+
+    /**
+     * A colour chart through the stage's light and tone curves: flat patches of known albedo (the flora's) facing the
+     * sun, their rendered sRGB printed beside the albedo's own, for agx and pbr_neutral.
+     */
+    @Test
+    @EnabledIfEnvironmentVariable(named = "TRUESIM_SCREENSHOTS", matches = "true")
+    void colourChart() throws IOException {
+        String[] names = {"rowan berry", "apple red", "rose hip", "white petal", "pink petal", "gentian", "leaf",
+            "arnica"};
+        com.truesim.common.procedural.flora.Albedo[] albedos = {
+            new com.truesim.common.procedural.flora.Albedo(0.5, 0.05, 0.02),
+            new com.truesim.common.procedural.flora.Albedo(0.42, 0.05, 0.035),
+            new com.truesim.common.procedural.flora.Albedo(0.45, 0.04, 0.02),
+            new com.truesim.common.procedural.flora.Albedo(0.72, 0.7, 0.6),
+            new com.truesim.common.procedural.flora.Albedo(0.7, 0.42, 0.48),
+            new com.truesim.common.procedural.flora.Albedo(0.025, 0.05, 0.45),
+            new com.truesim.common.procedural.flora.Albedo(0.045, 0.1, 0.018),
+            new com.truesim.common.procedural.flora.Albedo(0.78, 0.42, 0.04)};
+        for (String curve : List.of("agx", "pbr_neutral")) {
+            Path out = ProceduralFilms.folder("colour-chart-" + curve);
+            try (Stage stage = new Stage(device, WIDTH, HEIGHT, 40, 20)) {
+                double[] sun = {-0.45, 0.6, -0.65};
+                double l = Math.sqrt(0.45 * 0.45 + 0.36 + 0.65 * 0.65);
+                for (int i = 0; i < names.length; i++) {
+                    com.truesim.common.procedural.flora.Palette palette = com.truesim.common.procedural.flora.Palette
+                        .DEFAULT.with(com.truesim.common.procedural.flora.Palette.Part.FRUIT,
+                            com.truesim.common.procedural.flora.Ramp.of(albedos[i]));
+                    int texture = stage.texture(Looks.palette(palette));
+                    int material = stage.paletteMaterial(texture, 0.6f, 0.1f, 0, 0);
+                    com.truesim.common.procedural.mesh.MeshWriter writer = new com.truesim.common.procedural.mesh.MeshWriter();
+                    double u = com.truesim.common.procedural.flora.Palette.u(0.5);
+                    double v = com.truesim.common.procedural.flora.Palette.v(com.truesim.common.procedural.flora.Palette.Part.FRUIT);
+                    // a patch facing the sun, a metre square, on a post
+                    double nx = sun[0] / l;
+                    double ny = sun[1] / l;
+                    double nz = sun[2] / l;
+                    double tx = nz;
+                    double tz = -nx;
+                    double tl = Math.hypot(tx, tz);
+                    tx /= tl;
+                    tz /= tl;
+                    double bx = ny * tz;
+                    double by = nz * tx - nx * tz;
+                    double bz = -ny * tx;
+                    int a0 = -1;
+                    for (int k = 0; k < 4; k++) {
+                        double su = (k == 1 || k == 2 ? 0.5 : -0.5);
+                        double sv = (k >= 2 ? 0.5 : -0.5);
+                        int vtx = writer.vertex(su * tx + sv * bx, 1.2 + sv * by, su * tz + sv * bz, nx, ny, nz, tx, 0,
+                            tz, u, v);
+                        if (k == 0) {
+                            a0 = vtx;
+                        }
+                    }
+                    writer.quad(a0, a0 + 1, a0 + 2, a0 + 3);
+                    writer.quad(a0, a0 + 3, a0 + 2, a0 + 1);
+                    stage.place(stage.add(writer.build(0)), material, (i - 3.5) * 1.3, 0, 0, 1);
+                }
+                // from the sun's side, the sun behind the camera
+                stage.look(9 * sun[0] / l, 1.2 + 9 * sun[1] / l, 9 * sun[2] / l, 0, 1.2, 0, 60)
+                    .shade().curve(curve);
+                stage.frames(6, 1 / 30.0);
+                BufferedImage shot = stage.shot();
+                ImageIO.write(shot, "png", out.resolve("chart.png").toFile());
+            }
+        }
+    }
+
+    /**
+     * A group from 50 m, as one sees them across a valley: rowans, apple trees and dog roses, first each in flower
+     * (on its peak day), then each in fruit; the camera drifting slowly sideways.
+     */
+    @Test
+    @EnabledIfEnvironmentVariable(named = "TRUESIM_FLORA_FILMS", matches = "true")
+    void groupFromFiftyMetres() throws IOException {
+        Path out = ProceduralFilms.folder("group-50m");
+        int frame = 0;
+        for (int state = 0; state < 2; state++) {
+            try (Stage stage = new Stage(device, WIDTH * SUPER, HEIGHT * SUPER, 200, 60)) {
+                TreeSpecies[] group = {TreeSpecies.ROWAN, TreeSpecies.APPLE, TreeSpecies.DOG_ROSE, TreeSpecies.ROWAN,
+                    TreeSpecies.APPLE, TreeSpecies.DOG_ROSE, TreeSpecies.DOG_ROSE};
+                double[][] at = {{-9, -2}, {-1, 1}, {5, 4}, {9, -3}, {15, 0}, {-4, 5}, {11, 5}};
+                long[] seeds = {7, 3, 7, 8, 10, 9, 3}; // the apples of the red cultivar
+                for (int i = 0; i < group.length; i++) {
+                    var p = group[i].fruiting().phenology();
+                    double day = state == 0 ? p.peakBloom() : p.ripe();
+                    Tree tree = Trees.generate(group[i], TreeOptions.DEFAULTS.withDay(day), seeds[i]);
+                    ProceduralFilms.place(stage, ProceduralFilms.load(stage, tree), 0, at[i][0], at[i][1], i);
+                }
+                stage.wind(ProceduralFilms.wind(2)).curve(NEUTRAL).frontLit();
+                String caption = state == 0 ? "From 50 m, in flower: rowan " + date(TreeSpecies.ROWAN.fruiting()
+                    .phenology().peakBloom()) + ", apple " + date(TreeSpecies.APPLE.fruiting().phenology().peakBloom())
+                    + ", dog rose " + date(TreeSpecies.DOG_ROSE.fruiting().phenology().peakBloom())
+                    : "From 50 m, in fruit: rowan " + date(TreeSpecies.ROWAN.fruiting().phenology().ripe())
+                    + ", apple " + date(TreeSpecies.APPLE.fruiting().phenology().ripe()) + ", dog rose "
+                    + date(TreeSpecies.DOG_ROSE.fruiting().phenology().ripe());
+                for (int f = 0; f < 120; f++) {
+                    double x = 3 - 6.0 * f / 120;
+                    stage.look(x, 4, 52, x * 0.5 + 3, 3.5, 0, 30);
+                    if (f == 0) {
+                        stage.shade();
+                    }
+                    stage.frames(f == 0 ? 4 : 1, 1 / 30.0);
+                    write(stage.shot(), out, frame++, caption);
+                }
+            }
         }
     }
 }

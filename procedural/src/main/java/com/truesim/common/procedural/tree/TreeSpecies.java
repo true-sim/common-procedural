@@ -176,11 +176,11 @@ public record TreeSpecies(String name, Growth growth, double height, double heig
         0.012, 1.5, 0.16, 0.25, 2.2, 0.3, 0.3, List.of(),
         new Crown(Crown.Shape.OVOID, 0.3, 1300, 0.26, 10, 2, 0.2, 100),
         atlas2x2(Kind.LEAF_CLUSTER, 0.34, 0.26, 0.24, 1, 0.6, 0.8, true), 0.35, 0.5, 0.12,
-        new Fruiting(Placement.ALONG, 1, 5, 0.5, 0.3,
-            new Inflorescence(Arrangement.CORYMB, 12, 16, 0.05, 0.1, 0.012, 1.0, 0, 1.6, 10),
+        new Fruiting(Placement.ALONG, 1, 10, 0.6, 0.3,
+            new Inflorescence(Arrangement.CORYMB, 12, 16, 0.065, 0.1, 0.012, 1.0, 0, 1.6, 10),
             new FlowerShape(Form.SIMPLE, 5, 0.0045, 0.0045, Tip.ROUND, 0.05, 0, 5, 0.0015, 0.0018, 0.0012, 0),
             new FruitShape(FruitShape.Form.BERRY, 0.0048, 0.95, 0.1, 0.35, 0, 0, 0.2),
-            new Phenology(14, 145, 175, 10, 215, 240, 18, 275, 400), 0.3, 0.06,
+            new Phenology(14, 145, 175, 10, 215, 240, 18, 275, 400), 0.55, 0.06,
             Palette.DEFAULT
                 .with(Part.PETAL, new Ramp(a(0.42, 0.46, 0.3), a(0.72, 0.7, 0.6), a(0.4, 0.35, 0.24)))
                 .with(Part.CENTRE, Ramp.of(a(0.62, 0.55, 0.36)))
@@ -196,16 +196,16 @@ public record TreeSpecies(String name, Growth growth, double height, double heig
         0.015, 2, 0.15, 0.25, 2.2, 0.3, 0.3, List.of(),
         new Crown(Crown.Shape.ELLIPSOID, 0.5, 1500, 0.25, 10, 2, 0.05, 100),
         atlas2x2(Kind.LEAF_CLUSTER, 0.36, 0.3, 0.24, 1, 0.6, 0.8, true), 0.35, 0.5, 0.12,
-        new Fruiting(Placement.ALONG, 1, 3.6, 0.8, 0.25,
+        new Fruiting(Placement.ALONG, 1, 14, 0.8, 0.25,
             new Inflorescence(Arrangement.CLUSTER, 4, 6, 0.6, 0.01, 0.025, 0.6, 0, 0, 1),
             new FlowerShape(Form.SIMPLE, 5, 0.018, 0.016, Tip.ROUND, 0.35, 0, 5, 0.007, 0.004, 0.004, 0),
             new FruitShape(FruitShape.Form.POME, 0.036, 0.88, 0.15, 0.18, 0, 0.25, 0.9),
-            new Phenology(12, 118, 142, 7, 230, 250, 25, 262, 295), 0.2, 0.12,
+            new Phenology(12, 118, 142, 7, 215, 240, 25, 262, 295), 0.18, 0.12,
             Palette.DEFAULT
                 .with(Part.PETAL, new Ramp(a(0.5, 0.12, 0.18), a(0.72, 0.62, 0.62), a(0.6, 0.55, 0.5)))
                 .with(Part.CENTRE, Ramp.of(a(0.65, 0.55, 0.2)))
-                .with(Part.FRUIT, new Ramp(a(0.12, 0.2, 0.04), a(0.35, 0.2, 0.04), a(0.32, 0.03, 0.03)))
-                .with(Part.FRUIT_ALT, new Ramp(a(0.12, 0.2, 0.04), a(0.2, 0.3, 0.05), a(0.32, 0.38, 0.08)))));
+                .with(Part.FRUIT, new Ramp(a(0.12, 0.2, 0.04), a(0.4, 0.22, 0.04), a(0.42, 0.05, 0.035)))
+                .with(Part.FRUIT_ALT, new Ramp(a(0.12, 0.2, 0.04), a(0.3, 0.38, 0.06), a(0.5, 0.52, 0.12)))));
 
     /**
      * Elder (Sambucus nigra): a shrub of several stems, broad flat heads of tiny creamy flowers in June, turning
@@ -215,7 +215,7 @@ public record TreeSpecies(String name, Growth growth, double height, double heig
         0.01, 3, 0.07, 0.15, 2.2, 0.25, 0.25, List.of(),
         new Crown(Crown.Shape.ELLIPSOID, 0.48, 1100, 0.22, 10, 2, 0.05, 90),
         atlas2x2(Kind.LEAF_CLUSTER, 0.36, 0.3, 0.22, 1, 0.6, 0.8, true), 0.3, 0.5, 0.15,
-        new Fruiting(Placement.ALONG, 1, 4, 0.5, 0.3,
+        new Fruiting(Placement.ALONG, 1, 7, 0.6, 0.3,
             new Inflorescence(Arrangement.UMBEL, 12, 16, 0.07, 0.1, 0.04, 1.1, 0, 2.2, 18),
             new FlowerShape(Form.SIMPLE, 5, 0.0025, 0.0022, Tip.ROUND, 0, 0, 0, 0.001, 0.0012, 0.0008, 0),
             new FruitShape(FruitShape.Form.BERRY, 0.003, 1, 0.1, 0, 0, 0, 0.3),
@@ -235,8 +235,8 @@ public record TreeSpecies(String name, Growth growth, double height, double heig
         0.35, 30, 0.02, 4, 0.025, 0.1, 2.2, 0.25, 0.2, List.of(),
         new Crown(Crown.Shape.HEMISPHERE, 0.6, 900, 0.14, 10, 2, -0.15, 80),
         atlas2x2(Kind.LEAF_CLUSTER, 0.2, 0.16, 0.15, 1, 0.6, 0.7, true), 0.15, 0.4, 0.2,
-        new Fruiting(Placement.TIPS, 1, 0.4, 0, 0.2,
-            new Inflorescence(Arrangement.CLUSTER, 1, 3, 0.45, 0, 0.02, 0.5, 0, 0.6, 1),
+        new Fruiting(Placement.ALONG, 1, 16, 0.7, 0.15,
+            new Inflorescence(Arrangement.CLUSTER, 1, 4, 0.45, 0, 0.02, 0.5, 0, 0.6, 1),
             new FlowerShape(Form.SIMPLE, 5, 0.022, 0.024, Tip.NOTCHED, 0.2, 0, 5, 0.018, 0.006, 0.003, 0),
             new FruitShape(FruitShape.Form.BERRY, 0.008, 1.4, 0.15, 0.5, 0, 0, 0.4),
             new Phenology(12, 160, 185, 4, 245, 270, 20, 330, 440), 0.8, 0.02,

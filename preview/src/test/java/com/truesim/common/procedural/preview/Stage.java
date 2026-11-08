@@ -72,6 +72,7 @@ final class Stage implements AutoCloseable {
     final Camera camera = new Camera();
     private float[] sun = normalize(-0.45f, 0.6f, -0.65f);
     private int nextId;
+    private String curve = "agx";
     private final boolean large;
     private final int soil;
     private SceneView view;
@@ -263,12 +264,29 @@ final class Stage implements AutoCloseable {
         view = geometry.createView(port, camera, large ? ViewOptions.of(1 << 22, 1 << 24).withBins(1 << 21, 1 << 23) : ViewOptions.of(1 << 21, 1 << 22));
         view.set(1, MeshletRenderer.MODE_LIT);
         shadows = new Shadows(geometry, lights);
-        graph.settings().set(DisplayTransform.CURVE, "agx");
+        graph.settings().set(DisplayTransform.CURVE, curve);
         port.add(new VisibilityBufferShading(geometry, view, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_D32_SFLOAT))
             .add(new EnvironmentLighting(environment, view)).add(new SkyBackground(environment, view))
             .add(new ClusteredLights(lights, view)).add(shadows.view(view))
             .add(new DisplayTransform().transform(Keys.SCENE_COLOR, SHOWN, DisplayEncoding.SDR_SRGB))
             .output(SHOWN, target.output());
+        return this;
+    }
+
+    /**
+     * The sun behind the camera's usual side (+z) instead of facing it: front light, as a photograph of a tree in
+     * flower or fruit is taken. Before {@link #shade}.
+     */
+    Stage frontLit() {
+        sun = normalize(-0.45f, 0.6f, 0.65f);
+        lights.directional(0, -sun[0], -sun[1], -sun[2], 4.2f, 3.9f, 3.4f);
+        return this;
+    }
+
+    /** The display's tone curve from now on: agx (the default), pbr_neutral, aces, ... */
+    Stage curve(String name) {
+        curve = name;
+        graph.settings().set(DisplayTransform.CURVE, name);
         return this;
     }
 
