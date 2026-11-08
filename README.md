@@ -617,22 +617,49 @@ flower and in fruit with close-ups of a head at every level, every plant through
 1,000 distinct trees, an Alpine mix (spruce 40 %, larch 25 %, fir 15 %, pine 10 %, beech and birch 5 % each), each
 with three levels, a billboard and impostor hints.
 
-Measured on a 32-thread desktop CPU (JDK 27), after a warm-up:
+Measured on a 32-thread desktop CPU (JDK 27), after a warm-up, on the summer day (conifers with their cones):
 
 | Species | per tree, one thread | LOD 0 triangles |
 |---|---|---|
-| spruce | 40.5 ms | 67,044 |
-| fir | 36.0 ms | 67,295 |
-| larch | 13.4 ms | 70,574 |
-| pine | 54.6 ms | 74,059 |
-| beech | 26.7 ms | 27,682 |
-| birch | 11.8 ms | 14,302 |
-| hazel | 5.8 ms | 7,834 |
-| mugo | 3.3 ms | 22,482 |
+| spruce | 44.3 ms | 68,450 |
+| fir | 38.5 ms | 68,610 |
+| larch | 28.4 ms | 77,607 |
+| pine | 68.4 ms | 77,440 |
+| stone-pine | 32.7 ms | 76,024 |
+| beech | 27.9 ms | 27,682 |
+| oak | 47.1 ms | 45,015 |
+| ash | 33.4 ms | 36,232 |
+| birch | 12.2 ms | 14,302 |
+| alder | 15.2 ms | 35,419 |
+| hazel | 7.0 ms | 11,762 |
+| mugo | 4.1 ms | 25,633 |
+| green-alder | 7.4 ms | 19,743 |
+| willow | 5.3 ms | 6,178 |
 
-**A forest of 1,000 trees: 25.3 s on one thread, 2.6 s on 32 threads** (a generator per thread), 64.6 million LOD 0
-triangles in all. Through the asset path a tree is generated once per recipe and generator version, then read from the
-generation cache.
+**A forest of 1,000 trees: 31.5 s on one thread, 3.0 s on 32 threads** (a generator per thread), 67.2 million LOD 0
+triangles in all (25.3 s and 2.6 s before cones: their sites, shapes and the budget passes they cost). Through the
+asset path a tree is generated once per recipe and generator version, then read from the generation cache.
+
+Flowering and fruiting species on their peak bloom and ripe days (`ForestBenchmark.flora`; all levels, billboard,
+impostor hints): a crown of hundreds of compound heads costs most in flower, where the budget passes mesh it again.
+
+| Species | in flower | in fruit | LOD 0 triangles (flower / fruit) |
+|---|---|---|---|
+| rowan | 162.9 ms | 81.5 ms | 49,213 / 47,497 |
+| apple | 71.0 ms | 14.6 ms | 57,549 / 60,480 |
+| elder | 151.6 ms | 54.4 ms | 28,592 / 28,268 |
+| oak | 36.7 ms | 30.9 ms | 39,598 / 47,598 |
+| ash | 23.3 ms | 22.6 ms | 34,698 / 41,988 |
+| willow | 11.8 ms | 5.3 ms | 15,483 / 15,483 |
+| dog-rose | 8.9 ms | 2.6 ms | 7,295 / 6,342 |
+| alpenrose | 8.4 ms | 2.5 ms | 22,730 / 5,472 |
+| blueberry | 4.9 ms | 2.1 ms | 8,674 / 5,081 |
+| lingonberry | 2.3 ms | 1.7 ms | 12,560 / 5,787 |
+
+Plants, per clump on one thread: gentian 0.23 ms (267 triangles), arnica 0.34 ms (559), alpine aster 0.12 ms (709),
+edelweiss 0.11 ms (453), buttercup 0.28 ms (649), clover 0.14 ms (631), grass 0.57 ms (1,557), sedge 0.19 ms
+(1,132), cotton grass 0.13 ms (707), rush 0.21 ms (1,249), marsh marigold 0.14 ms (616). **A meadow of 10,000
+clumps: 0.11 s on 32 threads** (6.4 million LOD 0 triangles).
 
 ## Preview: pictures and films through the engine
 

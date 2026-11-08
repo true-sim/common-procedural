@@ -126,9 +126,16 @@ public final class TreeGenerator {
             if (mesh.triangleCount() <= lod.triangleBudget() || attempt == 16) {
                 return mesh;
             }
-            // flowers and fruits simplified and merged first, then leaves and twigs thinned; dropped last
+            // flowers and fruits simplified and merged first, then leaves and twigs thinned; dropped last. Where they
+            // are too few to make the difference, both at once: every attempt meshes the whole tree again
+            int over = mesh.triangleCount() - lod.triangleBudget();
+            int attached = (mesh.submeshEnd(Tree.ATTACHMENTS) - mesh.submeshStart(Tree.ATTACHMENTS)) / 3;
             if (detail < 2) {
                 detail++;
+                if (attached < over) {
+                    keep += Math.max(1, keep / 2);
+                    minRadius *= 1.4;
+                }
             } else if (detail == 2 && keep > 6 * lod.leafKeep()) {
                 // even thinned leaves leave no room: drop flowers and fruits, and start thinning over
                 detail++;
