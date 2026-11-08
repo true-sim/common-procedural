@@ -369,11 +369,47 @@ model.gentian = game://flora/gentian.plant
 
 ### Benchmark
 
-BENCHMARK
+`LauterbrunnenBenchmark` (`TRUESIM_BENCHMARK=true ./gradlew :common-procedural-ecology-terrain:test --tests
+'*LauterbrunnenBenchmark'`): Lauterbrunnen's near area from effects-terrain's cache (swissALTI3D at 2 m with
+effects-terrain's surface detail), 2 by 2 km round the church: the valley floor, the cliffs and both sides to about
+1500 m, in 256 m tiles with 4 m fields, meadows kept open, every instance layer. A 32-thread desktop CPU, JDK 27,
+2026-11-08, the second of two rounds after a warm-up:
+
+| | per km2 |
+|---|---|
+| terrain analysis (12 blocks of 2 km with their margins, shared by all tiles of a block; heights on all cores) | 0.83 s for the area's blocks |
+| tiles (fields and placement), one thread | 0.98 s |
+| tiles, 32 threads | 0.27 s |
+| plants placed | 10,593 trees, 6,019 shrubs, 31,466 dwarf shrubs, 20,698 herb clumps |
+
+So a 256 m tile costs about 64 ms on one thread once its block is analysed; streaming at a walk or a drive is far
+within one core. Fields alone (no instances) are several times cheaper: the maps' 8 by 8 km at 8 m took a few seconds
+on all cores.
 
 ### Pictures and films
 
-FILMS
+Two films (1280 x 720, 30 frames a second) of Lauterbrunnen, made from effects-terrain's cache:
+
+- **Map views** (`LauterbrunnenMaps`, `TRUESIM_PICTURES=true ./gradlew :common-procedural-ecology-terrain:test --tests
+  '*LauterbrunnenMaps' -Ppictures=<dir>`; frames, then `ffmpeg -framerate 0.4 -i map%03d.png -vf fps=30 ...`): 8 by 8
+  km from the Schilthorn to Wengen over hillshade: belts, temperature, insolation, snow, wetness index, exposure,
+  moisture, rivers with riparian ground and wetlands, ground cover, the dominant canopy, the valley floor closer
+  (hydrology, ground cover, canopy along the Weisse Luetschine), then every species' abundance.
+- **A flight up the valley side** (`EcologyFlight` in `preview`, `TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true
+  -Ptruesim.engine=../engine-vegetation :preview:test --tests '*EcologyFlight*'`): from the floor by the river over the
+  cliffs and the Muerren terrace to the Schilthorn, turning east to the Jungfrau: the terrain coloured by the ecology's
+  ground cover, 364,000 trees and shrubs placed by it within a kilometre of the path, drawn by common-procedural's trees
+  as stand-ins (no vegetation renderer yet: stone pine as pine, oak, ash and apple as beech, rowan and alder as birch,
+  willow, green alder, elder and dog rose as hazel), levels of detail by distance, billboards casting no shadows. Dwarf
+  shrubs, herbs and grass show only in the ground's colour. `TRUESIM_SCREENSHOTS=true` draws four stills of it on a
+  validated device (clean under GPU-assisted validation).
+
+Judged against photographs of the valley: the belts sit where they do there (spruce forest on the flanks, larch at the
+upper edge, open alpine pastures above about 2000 m, rock and snow at the Schilthorn), the valley floor is meadow with
+forest patches, the cliffs mostly bare. What does not look real: the ground is coloured, not textured (meadows read
+as flat khaki, cliffs as smooth grey), there is no aerial perspective (the far mountains are as sharp and saturated
+as the near ones), the stand-in trees repeat (two variants a preset) and a few stand on the cliffs where photographs
+show bare rock, and nothing grows below the trees but the colour.
 
 ### What it does not do (yet)
 
@@ -446,7 +482,7 @@ TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=../engine-v
 
 Films (1280 x 720, 30 frames a second): a turntable of every species, a small forest in rising wind, the levels of
 detail side by side (spruce and beech: levels 0-2 and the billboard), the seasons (larch through the year, a spruce
-under snow).
+under snow), and the ecology's flight up Lauterbrunnen's side (see [Ecology](#pictures-and-films)).
 
 ## Roadmap
 

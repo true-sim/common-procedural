@@ -72,6 +72,7 @@ final class Stage implements AutoCloseable {
     final Camera camera = new Camera();
     private float[] sun = normalize(-0.45f, 0.6f, -0.65f);
     private int nextId;
+    private final boolean large;
     private SceneView view;
     private Shadows shadows;
     private double time;
@@ -88,8 +89,12 @@ final class Stage implements AutoCloseable {
         this.width = width;
         this.height = height;
         pool = new GeometryPool(device, capacity);
+        large = instances >= 1 << 19;
         scene = new GpuScene(device, pool, instances);
-        renderer = new MeshletRenderer(device, scene, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_D32_SFLOAT);
+        // a valley of plants: chunks of 64 meshlets for every instance in every view from the first frame
+        renderer = instances >= 1 << 19 ? new MeshletRenderer(device, scene, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_FORMAT_D32_SFLOAT, scene.frameSlots(), 1 << 22) : new MeshletRenderer(device, scene,
+            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_D32_SFLOAT);
         materials = new Materials(device, 128);
         materials.register(com.truesim.common.procedural.preview.materials.ProceduralTree.TYPE);
         textures = new Textures(device);
@@ -135,8 +140,14 @@ final class Stage implements AutoCloseable {
     /** Sets instance {@code id}: {@code mesh} at (x, y, z), turned by {@code yaw}, scaled (sx, sy, sz). */
     void set(int id, int mesh, int material, double x, double y, double z, double yaw, double sx, double sy,
         double sz) {
-        scene.set(id, mesh, material, x, y, z, 0, (float) Math.sin(yaw / 2), 0, (float) Math.cos(yaw / 2),
-            (float) sx, (float) sy, (float) sz);
+        set(id, mesh, material, true, x, y, z, yaw, sx, sy, sz);
+    }
+
+    /** {@link #set}, casting shadows or not. */
+    void set(int id, int mesh, int material, boolean shadows, double x, double y, double z, double yaw, double sx,
+        double sy, double sz) {
+        scene.set(id, mesh, material, 1, shadows, x, y, z, 0, (float) Math.sin(yaw / 2), 0,
+            (float) Math.cos(yaw / 2), (float) sx, (float) sy, (float) sz);
     }
 
     /** {@code mesh} in the geometry pool, with its wind data. */
@@ -206,7 +217,8 @@ final class Stage implements AutoCloseable {
         Environment environment = Environment.panorama("stage sky", sky, 1024);
         SceneGeometry geometry = SceneGeometry.meshlets(renderer);
         ViewPort port = graph.addView("main").size(width, height);
-        view = geometry.createView(port, camera, ViewOptions.of(1 << 21, 1 << 22));
+        // a valley's forest: room for many meshlets, masked leaves among them, and occlusion culling
+        view = geometry.createView(port, camera, large ? ViewOptions.of(1 << 22, 1 << 24).withBins(1 << 21, 1 << 23) : ViewOptions.of(1 << 21, 1 << 22));
         view.set(1, MeshletRenderer.MODE_LIT);
         shadows = new Shadows(geometry, lights);
         graph.settings().set(DisplayTransform.CURVE, "agx");

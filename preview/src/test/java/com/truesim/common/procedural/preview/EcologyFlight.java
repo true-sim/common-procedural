@@ -64,9 +64,9 @@ class EcologyFlight {
     private static final double SIZE = 8192;
     private static final double CELL = 8;
     /** The far terrain round it: fields every 32 m. */
-    private static final double FAR_X0 = -19456;
-    private static final double FAR_Z0 = -12800;
-    private static final double FAR_SIZE = 32768;
+    private static final double FAR_X0 = -28672;
+    private static final double FAR_Z0 = -20480;
+    private static final double FAR_SIZE = 49152;
     private static final double FAR_CELL = 32;
 
     /** Keyframes: x, z, height (absolute, or above ground where negative), seconds. */
@@ -144,8 +144,9 @@ class EcologyFlight {
             .withAnalysis(new EcologyParameters.Analysis(32, 8192, 8192, 300, 60, 16));
         Ecology farEcology = new Ecology(ground, far, AlpineSpecies.ALL);
         long start = System.nanoTime();
-        List<EcologyTile> nearTiles = tiles(ecology, X0, Z0, SIZE, 512, true);
-        List<EcologyTile> farTiles = tiles(farEcology, FAR_X0, FAR_Z0, FAR_SIZE, 2048, false);
+        Ecology fieldsOnly = new Ecology(ground, near.withPlacement(none), AlpineSpecies.ALL);
+        List<EcologyTile> nearTiles = tiles(ecology, fieldsOnly, X0, Z0, SIZE, 512);
+        List<EcologyTile> farTiles = tiles(farEcology, farEcology, FAR_X0, FAR_Z0, FAR_SIZE, 2048);
         System.out.printf(Locale.ROOT, "ecology: %d near and %d far tiles in %.1f s%n", nearTiles.size(),
             farTiles.size(), (System.nanoTime() - start) / 1e9);
         int terrain = stage.vertexColorMaterial(0.92f);
@@ -196,9 +197,29 @@ class EcologyFlight {
         return world;
     }
 
-    /** The ecology's tiles over a square, on all threads; with plants only near the path when {@code corridor}. */
-    private static List<EcologyTile> tiles(Ecology ecology, double x0, double z0, double size, double tile,
-        boolean corridor) throws Exception {
+    /** The distance from (x, z) to the flight's path, metres. */
+    private static double fromPath(double x, double z) {
+        double best = Double.MAX_VALUE;
+        for (int k = 0; k + 1 < PATH.length; k++) {
+            double ax = PATH[k][0];
+            double az = PATH[k][1];
+            double bx = PATH[k + 1][0] - ax;
+            double bz = PATH[k + 1][1] - az;
+            double l = bx * bx + bz * bz;
+            double t = l == 0 ? 0 : Math.clamp(((x - ax) * bx + (z - az) * bz) / l, 0, 1);
+            double dx = x - ax - t * bx;
+            double dz = z - az - t * bz;
+            best = Math.min(best, Math.sqrt(dx * dx + dz * dz));
+        }
+        return best;
+    }
+
+    /**
+     * The ecology's tiles over a square, on all threads: from {@code plants} (with instances) near the path, from
+     * {@code fields} (the same fields, no instances) elsewhere.
+     */
+    private static List<EcologyTile> tiles(Ecology plants, Ecology fields, double x0, double z0, double size,
+        double tile) throws Exception {
         int count = (int) (size / tile);
         List<EcologyTile> all = new ArrayList<>();
         try (ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
@@ -207,6 +228,7 @@ class EcologyFlight {
                 for (int i = 0; i < count; i++) {
                     double x = x0 + i * tile;
                     double z = z0 + j * tile;
+                    Ecology ecology = fromPath(x + tile / 2, z + tile / 2) < 1100 ? plants : fields;
                     results.add(pool.submit(() -> ecology.region(x, z, tile, tile)));
                 }
             }
@@ -222,11 +244,11 @@ class EcologyFlight {
         double temperature = tile.field(EcologyTile.Field.TEMPERATURE)[a];
         double alpine = Math.clamp((13 - temperature) / 9, 0, 1);
         double[][] colors = {
-            {0.075 + 0.05 * alpine, 0.15 - 0.03 * alpine, 0.025 + 0.015 * alpine}, // meadow, valley to alpine
-            {0.035, 0.042, 0.02}, // forest floor
-            {0.07, 0.06, 0.035}, // heath
-            {0.24, 0.23, 0.21}, // scree
-            {0.16, 0.15, 0.14}, // rock
+            {0.05 + 0.04 * alpine, 0.11 - 0.025 * alpine, 0.012 + 0.012 * alpine}, // meadow, valley to alpine
+            {0.025, 0.032, 0.014}, // forest floor
+            {0.055, 0.04, 0.03}, // heath
+            {0.15, 0.145, 0.135}, // scree
+            {0.1, 0.095, 0.09}, // rock
             {0.78, 0.8, 0.85}, // snow
             {0.05, 0.07, 0.03}, // wetland
             {0.02, 0.04, 0.05}, // water
@@ -310,7 +332,7 @@ class EcologyFlight {
         double u = Math.clamp((t - PATH[k][3]) / (PATH[k + 1][3] - PATH[k][3]), 0, 1);
         double[] out = new double[3];
         for (int c = 0; c < 3; c++) {
-            int e = c == 0 ? 0 : c == 1 ? 2 : 1;
+            int e = c; // x, z, then the height
             double p0 = value(Math.max(k - 1, 0), e);
             double p1 = value(k, e);
             double p2 = value(k + 1, e);
@@ -328,16 +350,16 @@ class EcologyFlight {
         return PATH[k][e];
     }
 
-    /** The camera's heights over the flight, kept 18 m above the ground within 60 m, smoothed. */
+    /** The camera's heights over the flight, kept 12 m above the ground within 25 m, smoothed. */
     private double[] heights(int frames, double fps) {
         double[] y = new double[frames];
         for (int f = 0; f < frames; f++) {
             double[] p = camera(f / fps);
             double floor = 0;
             for (int k = 0; k < 9; k++) {
-                double dx = k == 0 ? 0 : 60 * Math.cos(k * Math.PI / 4);
-                double dz = k == 0 ? 0 : 60 * Math.sin(k * Math.PI / 4);
-                floor = Math.max(floor, surface.heightAt(p[0] + dx, p[1] + dz, 2) + 18);
+                double dx = k == 0 ? 0 : 25 * Math.cos(k * Math.PI / 4);
+                double dz = k == 0 ? 0 : 25 * Math.sin(k * Math.PI / 4);
+                floor = Math.max(floor, surface.heightAt(p[0] + dx, p[1] + dz, 2) + 12);
             }
             y[f] = Math.max(p[2], floor);
         }
@@ -373,13 +395,14 @@ class EcologyFlight {
             double dy = plant.y() - cy;
             double dz = plant.z() - cz;
             double d = Math.sqrt(dx * dx + dy * dy + dz * dz) / Math.max(plant.sy(), 0.3);
-            int level = d < 90 ? 0 : d < 260 ? 1 : d < 700 ? 2 : 3;
+            int level = d < 20 ? 0 : d < 60 ? 1 : d < 170 ? 2 : 3;
             if (level != world.levels[p]) {
                 world.levels[p] = level;
                 ProceduralFilms.Placed kind = world.kinds.get(plant.kind());
                 boolean billboard = level >= kind.tree().lods().size();
+                // only the nearer plants cast shadows: the cascades would otherwise draw every tree of the valley
                 world.stage.set(world.ids[p], kind.meshes()[Math.min(level, kind.meshes().length - 1)],
-                    billboard ? kind.billboardMaterial() : kind.material(), plant.x(), plant.y(), plant.z(),
+                    billboard ? kind.billboardMaterial() : kind.material(), level < 2, plant.x(), plant.y(), plant.z(),
                     plant.yaw(), plant.sxz(), plant.sy(), plant.sxz());
             }
         }
