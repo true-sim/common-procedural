@@ -69,7 +69,7 @@ class ProceduralFilms {
         BufferedImage atlasImage = Looks.leafAtlas(tree.species());
         int atlas = stage.texture(atlasImage);
         int material = stage.treeMaterial(bark, false, 0.9f, reach);
-        stage.treeMaterial(atlas, true, 0.75f, reach); // the leaves: the next material
+        stage.treeMaterial(atlas, true, 0.92f, reach); // the leaves: the next material
         int capture = stage.texture(Looks.capture(tree, atlasImage, 512));
         int billboard = stage.treeMaterial(capture, true, 0.85f, reach);
         int[] meshes = new int[tree.lods().size() + 1];
