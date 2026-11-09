@@ -1,6 +1,7 @@
 package com.truesim.common.procedural.assets;
 
 import com.truesim.annotations.AllowAllocation;
+import com.truesim.common.math.Maths;
 import com.truesim.common.procedural.flora.Palette;
 import com.truesim.common.procedural.mesh.ProceduralMesh;
 import com.truesim.common.procedural.plant.Plant;
@@ -8,6 +9,7 @@ import com.truesim.common.procedural.plant.PlantGenerator;
 import com.truesim.common.procedural.plant.PlantOptions;
 import com.truesim.common.procedural.plant.PlantSpecies;
 import com.truesim.common.procedural.plant.Plants;
+import com.truesim.common.procedural.rock.RockCover;
 import com.truesim.common.procedural.rock.RockGenerator;
 import com.truesim.common.procedural.rock.RockParams;
 import com.truesim.common.procedural.rock.Rocks;
@@ -38,6 +40,14 @@ public interface ProceduralGenerator {
     /** Whether its meshes sway: carry the wind data into the scene mesh ({@link SceneMeshes#FORMAT}). */
     default boolean sways() {
         return true;
+    }
+
+    /**
+     * Whether its meshes that do not sway keep their vertex color as a tint of their materials' albedo
+     * ({@link SceneMeshes#TINTED}: rocks' moss and lichen).
+     */
+    default boolean tinted() {
+        return false;
     }
 
     /** Whether its last mesh is a billboard (trees, plants) rather than a level of detail (rocks, buildings). */
@@ -135,7 +145,10 @@ public interface ProceduralGenerator {
         }
     };
 
-    /** Rocks ({@link Rocks}): their levels of detail. */
+    /**
+     * Rocks ({@link Rocks}): their levels of detail, the preset at the recipe's size, with its cover ({@code moss},
+     * {@code lichen}, {@code yaw} in degrees, {@code burial}).
+     */
     ProceduralGenerator ROCKS = new ProceduralGenerator() {
         @Override
         public String id() {
@@ -153,6 +166,11 @@ public interface ProceduralGenerator {
         }
 
         @Override
+        public boolean tinted() {
+            return true;
+        }
+
+        @Override
         public boolean billboard() {
             return false;
         }
@@ -160,12 +178,14 @@ public interface ProceduralGenerator {
         @Override
         @AllowAllocation("at load time")
         public List<ProceduralMesh> generate(Recipe recipe) {
-            for (RockParams preset : RockParams.PRESETS) {
-                if (preset.name().equals(recipe.preset())) {
-                    return Rocks.generate(preset, recipe.seed()).lods();
-                }
+            RockParams preset = RockParams.preset(recipe.preset());
+            double size = recipe.number("size", Double.NaN);
+            if (!Double.isNaN(size)) {
+                preset = preset.withSize(size);
             }
-            throw new IllegalArgumentException("No rock preset '" + recipe.preset() + "'");
+            RockCover cover = new RockCover(recipe.number("moss", 0), recipe.number("lichen", 0),
+                Maths.toRadians(recipe.number("yaw", 0)), recipe.number("burial", Double.NaN));
+            return Rocks.generate(preset, cover, recipe.seed()).lods();
         }
     };
 }

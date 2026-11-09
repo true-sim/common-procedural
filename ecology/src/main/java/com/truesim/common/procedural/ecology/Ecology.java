@@ -64,6 +64,7 @@ public final class Ecology {
     private final double[] need;
     private final int apple;
     private final double halo;
+    private final Obstacles obstacles;
 
     /** An ecology of {@code species} on {@code terrain}. */
     public Ecology(EcologyTerrain terrain, EcologyParameters parameters, List<Species> species) {
@@ -108,6 +109,39 @@ public final class Ecology {
             }
         }
         halo = (parameters.placement().iterations() + 1) * conflict;
+        obstacles = Obstacles.NONE;
+    }
+
+    /** {@code base} with {@code avoided}: the same conditions and analysis (shared), plants kept off the obstacles. */
+    private Ecology(Ecology base, Obstacles avoided) {
+        terrain = base.terrain;
+        parameters = base.parameters;
+        species = base.species;
+        insolation = base.insolation;
+        analysis = base.analysis;
+        clusters = base.clusters;
+        patches = base.patches;
+        layers = base.layers;
+        maxRadius = base.maxRadius;
+        shade = base.shade;
+        need = base.need;
+        apple = base.apple;
+        halo = base.halo;
+        obstacles = avoided;
+    }
+
+    /**
+     * This ecology with no plant where {@code avoided} blocks (rocks: {@code RockField}): the same conditions, fields
+     * and terrain analysis (shared, so its cache serves both), the plants placed as before but for those the
+     * obstacles block (taken out before thinning, so their neighbours may stand).
+     */
+    public Ecology avoiding(Obstacles avoided) {
+        return new Ecology(this, java.util.Objects.requireNonNull(avoided, "obstacles"));
+    }
+
+    /** What its plants keep off ({@link Obstacles#NONE} unless {@link #avoiding}). */
+    public Obstacles obstacles() {
+        return obstacles;
     }
 
     /** The largest size a plant takes relative to a grown plant (old plants on the best sites). */
@@ -524,6 +558,7 @@ public final class Ecology {
     /** Places the instance layers' plants of [x0, x1) x [z0, z1) into {@code out}. */
     private void place(Grid grid, double x0, double z0, double x1, double z1, Instances out) {
         Candidates all = new Candidates();
+        Obstacles.Region blocked = obstacles.over(x0 - halo, z0 - halo, x1 + halo, z1 + halo);
         double[] weights = new double[4];
         int[] corner = new int[1];
         for (Layer layer : Layer.ALL) {
@@ -579,6 +614,9 @@ public final class Ecology {
                     double form = sp.habit().krummholz() ? 1 - Range.smoothstep(0.25, 0.55, sizeField) : 0;
                     double widthScale = Math.min(MAX_SIZE, grown * (1 + 1.5 * form));
                     double radius = sp.habit().crown() * widthScale * lp.spacing();
+                    if (blocked.blocks(px, pz, radius)) {
+                        continue;
+                    }
                     double health = grid.sample(grid.suitability[chosen], weights, corner[0]);
                     all.add(px, pz, radius, unit(hash, 6), layer.ordinal(), chosen, grown, widthScale,
                         unit(hash, 7) * Maths.TAU, ageRandom, health, hash);

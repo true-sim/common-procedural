@@ -28,6 +28,12 @@ public final class SceneMeshes {
      */
     public static final VertexFormat STILL = VertexFormat.of(VertexAttribute.NORMAL, VertexAttribute.TANGENT,
         VertexAttribute.UV0);
+    /**
+     * Without wind, with the vertex color (rocks: a tint of the material's albedo for moss, lichen and fresh stone,
+     * which metallic-roughness multiplies its base color by): 16 bytes.
+     */
+    public static final VertexFormat TINTED = VertexFormat.of(VertexAttribute.NORMAL, VertexAttribute.TANGENT,
+        VertexAttribute.UV0, VertexAttribute.COLOR);
 
     private SceneMeshes() {
     }
@@ -46,8 +52,16 @@ public final class SceneMeshes {
      * {@code mesh} as a scene mesh with its wind data or without: a cluster hierarchy ({@code hierarchy}: the engine
      * draws each meshlet at the detail its distance needs) or one flat level.
      */
-    @AllowAllocation("building meshes, at load time")
     public static MeshData build(ProceduralMesh mesh, boolean wind, boolean hierarchy) {
+        return build(mesh, wind, false, hierarchy);
+    }
+
+    /**
+     * {@code mesh} as a scene mesh: with its wind data ({@link #FORMAT}), or without it but with its vertex color as a
+     * tint ({@code tinted}: {@link #TINTED}), or with neither ({@link #STILL}); a cluster hierarchy or one flat level.
+     */
+    @AllowAllocation("building meshes, at load time")
+    public static MeshData build(ProceduralMesh mesh, boolean wind, boolean tinted, boolean hierarchy) {
         int n = mesh.vertexCount();
         ElementBuffer vertices = mesh.vertices();
         Vec3Attribute normal = vertices.attribute(ProceduralVertex.NORMAL);
@@ -77,11 +91,13 @@ public final class SceneMeshes {
             colors[4 * i + 2] = (float) weights.z(i);
             colors[4 * i + 3] = (float) weights.w(i);
         }
-        MeshBuilder builder = new MeshBuilder(wind ? FORMAT : STILL, n).positions(mesh.positions())
+        MeshBuilder builder = new MeshBuilder(wind ? FORMAT : tinted ? TINTED : STILL, n).positions(mesh.positions())
             .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.TANGENT, tangents)
             .attribute(VertexAttribute.UV0, uv0);
         if (wind) {
             builder.attribute(VertexAttribute.UV1, uv1).attribute(VertexAttribute.COLOR, colors);
+        } else if (tinted) {
+            builder.attribute(VertexAttribute.COLOR, colors);
         }
         for (int s = 0; s < mesh.submeshCount(); s++) {
             if (mesh.submeshEnd(s) > mesh.submeshStart(s)) {
