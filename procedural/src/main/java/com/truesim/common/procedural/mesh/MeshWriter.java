@@ -33,6 +33,7 @@ public final class MeshWriter {
     private float phase;
     private float pivotHeight;
     private float reach;
+    private boolean rawColor;
 
     /** Empties the writer, keeping its memory; starts submesh 0. */
     public MeshWriter reset() {
@@ -54,12 +55,31 @@ public final class MeshWriter {
 
     /** The wind values of the vertices added next (see {@link ProceduralVertex}). */
     public void wind(double trunk, double branch, double leaf, double phase, double pivotHeight, double reach) {
+        this.rawColor = false;
         this.trunk = (float) trunk;
         this.branch = (float) branch;
         this.leaf = (float) leaf;
         this.phase = (float) phase;
         this.pivotHeight = (float) pivotHeight;
         this.reach = (float) reach;
+    }
+
+    /**
+     * Meshes that do not sway (fences): the {@code WIND} field of the vertices added next holds the color
+     * ({@code r}, {@code g}, {@code b}, 1) as it is, read as the scene mesh's {@code COLOR}, until {@link #wind} is
+     * called again.
+     */
+    public void color(double r, double g, double b) {
+        this.rawColor = true;
+        this.trunk = (float) r;
+        this.branch = (float) g;
+        this.leaf = (float) b;
+    }
+
+    /** The {@code WIND_PIVOT} field (the scene mesh's {@code UV1}) of the vertices added next, as it is. */
+    public void uv1(double u, double v) {
+        this.pivotHeight = (float) u;
+        this.reach = (float) v;
     }
 
     /** Sets the branch and leaf weights only. */
@@ -122,7 +142,7 @@ public final class MeshWriter {
         pivots[2 * i + 1] = reach;
         winds[4 * i] = trunk;
         winds[4 * i + 1] = branch;
-        winds[4 * i + 2] = (float) ProceduralVertex.packLeafAndPhase(leaf, phase);
+        winds[4 * i + 2] = rawColor ? leaf : (float) ProceduralVertex.packLeafAndPhase(leaf, phase);
         winds[4 * i + 3] = 1;
         return vertexCount++;
     }
