@@ -16,7 +16,7 @@ class ProbeTest {
     void rocks() throws Exception {
         int i = 0;
         for (com.truesim.common.procedural.rock.RockParams params : com.truesim.common.procedural.rock.RockParams.PRESETS) {
-            for (int l = 0; l < 4; l++) {
+            for (int l = 0; l < params.subdivisions().size(); l++) {
                 com.truesim.common.procedural.rock.Rock rock = com.truesim.common.procedural.rock.Rocks.generate(params, 7);
                 com.truesim.common.procedural.SoftwareRender r = new com.truesim.common.procedural.SoftwareRender(320, 240);
                 double s = params.size();

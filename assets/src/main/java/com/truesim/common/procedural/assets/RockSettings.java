@@ -50,6 +50,9 @@ public final class RockSettings {
     /** The spread of sizes about their mean. */
     public static final Setting<Float> SPREAD = decimal("procedural.rocks.spread", D.spread(), 0, 2,
         "the spread of rocks' sizes about their mean (of the size's logarithm)");
+    /** The talus' and rockfall's power law. */
+    public static final Setting<Float> FRACTAL = decimal("procedural.rocks.fractal", D.fractal(), 1, 5,
+        "the talus' power law: rocks larger than a size fall off as the size to the minus this");
     /** How far rocks lean with the slope. */
     public static final Setting<Float> TILT = decimal("procedural.rocks.tilt", D.tilt(), 0, 1,
         "how far rocks lean with the ground's slope (1: flat on it)");
@@ -104,7 +107,7 @@ public final class RockSettings {
                 DENSITY.get(k)), min, Math.max(min, get(settings, MAX_SIZE.get(k)))));
         }
         return new RockFieldParameters(get(settings, CELL), cliffs, kinds, get(settings, SORTING), get(settings,
-            SPREAD), get(settings, TILT), get(settings, PACKING), get(settings, PLANT_CLEARANCE),
+            SPREAD), get(settings, FRACTAL), get(settings, TILT), get(settings, PACKING), get(settings, PLANT_CLEARANCE),
             new RockFieldParameters.Variants(settings.get(SEEDS), settings.get(HEADINGS), settings.get(COVER_LEVELS),
                 settings.get(DEPTHS)));
     }
@@ -136,7 +139,8 @@ public final class RockSettings {
 
     private static List<Setting<?>> all() {
         List<Setting<?>> list = new ArrayList<>(List.of(CELL, CLIFF_SLOPE, CLIFF_HEIGHT, SEARCH, SHADOW_ANGLE,
-            TALUS_SLOPE, REPOSE_SLOPE, ACTIVE_TALUS, SORTING, SPREAD, TILT, PACKING, PLANT_CLEARANCE, SEEDS, HEADINGS, COVER_LEVELS,
+            TALUS_SLOPE, REPOSE_SLOPE, ACTIVE_TALUS, SORTING, SPREAD, FRACTAL, TILT, PACKING, PLANT_CLEARANCE, SEEDS,
+            HEADINGS, COVER_LEVELS,
             DEPTHS));
         list.addAll(DENSITY);
         list.addAll(MIN_SIZE);

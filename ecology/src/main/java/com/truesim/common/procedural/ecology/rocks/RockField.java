@@ -87,6 +87,7 @@ public final class RockField implements Obstacles {
             return size() > RECENT;
         }
     });
+    private final Map<Long, float[]> talusBlocks = new ConcurrentHashMap<>();
     private final double maxReach;
     private final double halo;
     private final double streamArea;
@@ -237,6 +238,74 @@ public final class RockField implements Obstacles {
             }
             return new Shape(coarse.footprint(), java.util.Arrays.copyOf(contact, n));
         });
+    }
+
+    // ------------------------------------------------------------------------------------------------ talus cover
+
+    /** Metres a side of the blocks the talus cover is worked out in (cached). */
+    private static final double TALUS_BLOCK = 128;
+    private static final int TALUS_BLOCKS_KEPT = 4096;
+
+    /**
+     * How much of ({@code x}, {@code z}) is talus, 0 to 1: deposit below a cliff tall enough, within its run-out,
+     * on ground from a little under the talus slope to a little over the angle of repose (fading toward the run-out's
+     * end). Where the scree between the blocks lies: the terrain's gravel ({@code TalusModifier}) and the scattered
+     * small stones ({@link RockScatter}). Worked out in 128 m blocks of the field's samples, cached; the same at any
+     * point whichever blocks came first.
+     */
+    public double talus(double x, double z) {
+        double c = parameters.cell();
+        long bi = (long) Math.floor(x / TALUS_BLOCK);
+        long bj = (long) Math.floor(z / TALUS_BLOCK);
+        float[] block = talusBlock(bi, bj);
+        int n = (int) Math.round(TALUS_BLOCK / c) + 1;
+        double gx = (x - bi * TALUS_BLOCK) / c;
+        double gz = (z - bj * TALUS_BLOCK) / c;
+        int i = Math.clamp((int) Math.floor(gx), 0, n - 2);
+        int j = Math.clamp((int) Math.floor(gz), 0, n - 2);
+        double fx = gx - i;
+        double fz = gz - j;
+        int a = j * n + i;
+        return (1 - fz) * ((1 - fx) * block[a] + fx * block[a + 1]) + fz * ((1 - fx) * block[a + n]
+            + fx * block[a + n + 1]);
+    }
+
+    private float[] talusBlock(long bi, long bj) {
+        long key = bi * 0x1_0000_0001L ^ bj;
+        float[] block = talusBlocks.get(key);
+        if (block != null) {
+            return block;
+        }
+        if (talusBlocks.size() > TALUS_BLOCKS_KEPT) {
+            talusBlocks.clear();
+        }
+        double c = parameters.cell();
+        int n = (int) Math.round(TALUS_BLOCK / c) + 1;
+        double x0 = bi * TALUS_BLOCK;
+        double z0 = bj * TALUS_BLOCK;
+        Fields fields = new Fields(x0, z0, x0 + TALUS_BLOCK, z0 + TALUS_BLOCK);
+        RockFieldParameters.Cliffs cliffs = parameters.cliffs();
+        float[] out = new float[n * n];
+        for (int j = 0; j < n; j++) {
+            for (int i = 0; i < n; i++) {
+                long gi = Math.round(x0 / c) + i - fields.i0;
+                long gj = Math.round(z0 / c) + j - fields.j0;
+                int g = (int) (gj * fields.width + gi);
+                float t = fields.f[T][g];
+                if (Float.isNaN(t) || t > 1) {
+                    continue;
+                }
+                double slope = fields.f[SLOPE][g];
+                double cover = Maths.smoothstep(cliffs.talusSlope() - 6, cliffs.talusSlope(), slope)
+                    * (1 - Maths.smoothstep(cliffs.reposeSlope() + 2, cliffs.reposeSlope() + 8, slope))
+                    * (1 - Maths.smoothstep(0.8, 1, t))
+                    * Maths.smoothstep(cliffs.minHeight(), 3 * cliffs.minHeight(), fields.f[CLIFF][g])
+                    * (1 - fields.f[WATER][g]);
+                out[j * n + i] = (float) cover;
+            }
+        }
+        talusBlocks.put(key, out);
+        return out;
     }
 
     // ------------------------------------------------------------------------------------------------ the fields
@@ -490,11 +559,18 @@ public final class RockField implements Obstacles {
                         continue;
                     }
                     // the size: sorted along the deposit (talus, run-out), else spread about the kind's middle
-                    double along = Double.isNaN(t) ? 0.5 : Math.clamp(t, 0, 1);
-                    double mean = kp.minSize() + (kp.maxSize() - kp.minSize()) * Maths.pow(along,
-                        parameters.sorting());
-                    double size = Math.clamp(mean * Maths.exp(parameters.spread() * gaussian(hash)), kp.minSize(),
-                        kp.maxSize());
+                    double size;
+                    if (kind == RockKind.TALUS || kind == RockKind.ROCKFALL) {
+                        // a power law between a smallest size growing downslope (sorting) and the kind's largest
+                        double along = Double.isNaN(t) ? 0.5 : Math.clamp(t, 0, 1);
+                        double lo = kp.minSize() + Math.max(0, 0.4 * kp.maxSize() - kp.minSize())
+                            * Maths.pow(along, parameters.sorting());
+                        size = powerLaw(lo, kp.maxSize(), parameters.fractal(), unit(hash, 10));
+                    } else {
+                        double mean = 0.5 * (kp.minSize() + kp.maxSize());
+                        size = Math.clamp(mean * Maths.exp(parameters.spread() * gaussian(hash)), kp.minSize(),
+                            kp.maxSize());
+                    }
                     RockParams preset = preset(kind, size, unit(hash, 5));
                     // its cover: moss on damp, shaded ground and old rocks; lichen on lit, exposed ones
                     double moisture = fields.sample(MOISTURE, w, a);
@@ -733,6 +809,19 @@ public final class RockField implements Obstacles {
             return all.priority[a] > all.priority[b];
         }
         return Long.compareUnsigned(all.hash[a], all.hash[b]) > 0;
+    }
+
+    /**
+     * A size from {@code lo} to {@code hi} by a power law of exponent {@code d} (the number larger than {@code s}
+     * falling as {@code s^-d}), from the uniform {@code u}: its inverse distribution.
+     */
+    static double powerLaw(double lo, double hi, double d, double u) {
+        if (hi <= lo) {
+            return lo;
+        }
+        double a = Maths.pow(lo, -d);
+        double b = Maths.pow(hi, -d);
+        return Maths.pow(a - u * (a - b), -1 / d);
     }
 
     /** A uniform number in [0, 1) from {@code hash}'s stream {@code k}. */

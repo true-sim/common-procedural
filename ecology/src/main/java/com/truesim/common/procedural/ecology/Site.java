@@ -42,6 +42,11 @@ public final class Site {
     public double riverArea;
     /** Moisture on Ellenberg's scale (1 very dry to 12 under water). */
     public double moisture;
+    /**
+     * The soil's depth, metres, estimated: about a metre on gentle soil, thinning with the slope to nothing at the
+     * steepest ground trees stand on, and with the ground's share of rock and scree.
+     */
+    public double soilDepth;
     /** Ground fractions ({@link Ground}): rock, scree, soil, snow. */
     public final double[] ground = new double[Ground.COUNT];
     /** Open water, 0 to 1: rivers and lakes. */

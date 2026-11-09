@@ -47,7 +47,7 @@ import java.util.List;
 public final class RockGenerator {
 
     /** Version of the generated output: changes whenever the same inputs would give different meshes. */
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     private static final int MAX_PLANES = 48 + 6;
     /** The polytope's radius where no plane bounds it, in unit space. */
@@ -68,6 +68,9 @@ public final class RockGenerator {
     private double bedPhase;
     private long bedSeed;
     private boolean fresh;
+    private double stoneX = 1;
+    private double stoneY = 1;
+    private double stoneZ = 1;
 
     // icospheres by subdivision level
     private final double[][] sphereDirections = new double[8][];
@@ -97,7 +100,21 @@ public final class RockGenerator {
         double[] memberY = new double[members];
         memberScale[0] = 1;
         double angle = layout.nextDouble() * Maths.TAU;
-        for (int m = 1; m < members; m++) {
+        if (!p.cluster().heap()) {
+            // a patch: stones over a disc by a sunflower spiral, sizes by a power law (exponent 2: many small)
+            double lo = p.cluster().shrink();
+            double radius = p.cluster().spread() * p.size();
+            for (int m = 0; m < members; m++) {
+                double u = layout.nextDouble();
+                memberScale[m] = 1 / Math.sqrt(1 / (lo * lo) - u * (1 / (lo * lo) - 1));
+                double a = angle + m * 2.39996 + 0.6 * (layout.nextDouble() - 0.5);
+                double d = radius * Math.sqrt((m + 0.5) / members) * (0.85 + 0.3 * layout.nextDouble());
+                memberX[m] = d * Maths.cos(a);
+                memberZ[m] = d * Maths.sin(a);
+                memberYaw[m] = layout.nextDouble() * Maths.TAU;
+            }
+        }
+        for (int m = 1; m < members && p.cluster().heap(); m++) {
             double s = memberScale[m - 1] * p.cluster().shrink() * (0.88 + 0.24 * layout.nextDouble());
             memberScale[m] = m == 1 ? p.cluster().shrink() * (0.9 + 0.2 * layout.nextDouble()) : s;
             angle += 2.39996 + 0.5 * (layout.nextDouble() - 0.5); // the golden angle, jittered
@@ -165,6 +182,11 @@ public final class RockGenerator {
         bz = Maths.sin(dip) * Maths.sin(axis);
         bedPhase = rng.nextDouble();
         bedSeed = rng.nextLong();
+        // this stone's own proportions
+        double irregular = f.irregularity();
+        stoneX = 1 + irregular * (2 * rng.nextDouble() - 1);
+        stoneY = 1 + irregular * (2 * rng.nextDouble() - 1);
+        stoneZ = 1 + irregular * (2 * rng.nextDouble() - 1);
         planeCount = 0;
         if (f.joints() > 0) {
             // the bedding pair, on bed boundaries where the beds are thin enough to have one in reach
@@ -306,7 +328,8 @@ public final class RockGenerator {
         r -= worn * w.cracks() * Math.max(0, 1 - edge / 0.12);
         RockParams.Bedding b = params.bedding();
         if (b.thickness() > 0) {
-            double s = r * (x * bx + y * by + z * bz) / b.thickness() + bedPhase;
+            double s = r * (x * bx + y * by + z * bz) / b.thickness() + bedPhase
+                + b.waviness() * noise.simplex(x * 1.7 + ox, z * 1.7 + oz);
             double bed = Math.floor(s);
             double inBed = s - bed;
             double groove = 1 - Maths.smoothstep(0, 0.2, Math.min(inBed, 1 - inBed));
@@ -323,7 +346,7 @@ public final class RockGenerator {
         double max = Double.NEGATIVE_INFINITY;
         for (int v = 0; v < dirs.length / 3; v++) {
             double y = dirs[3 * v + 1] * radius(dirs[3 * v], dirs[3 * v + 1], dirs[3 * v + 2]) * size
-                * params.flatness();
+                * params.flatness() * stoneY;
             min = Math.min(min, y);
             max = Math.max(max, y);
         }
@@ -390,9 +413,9 @@ public final class RockGenerator {
     /** The point of the stone in direction (x, y, z), metres: scaled to its proportions and lifted (not yet cut). */
     private void place(double x, double y, double z, double size, double lift, double[] out) {
         double r = radius(x, y, z) * size;
-        out[0] = x * r * params.elongation();
-        out[1] = y * r * params.flatness() + lift;
-        out[2] = z * r;
+        out[0] = x * r * params.elongation() * stoneX;
+        out[1] = y * r * params.flatness() * stoneY + lift;
+        out[2] = z * r * stoneZ;
     }
 
     // ------------------------------------------------------------------------------------------------ cover

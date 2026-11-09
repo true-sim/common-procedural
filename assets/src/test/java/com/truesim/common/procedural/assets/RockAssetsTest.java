@@ -149,7 +149,11 @@ class RockAssetsTest {
         assertThat(p.cliffs().shadowAngle()).isEqualTo(30);
         assertThat(p.kinds().getFirst().density()).isEqualTo(0.1);
         assertThat(p.variants().seeds()).isEqualTo(2);
-        assertThat(RockSettings.ALL).hasSize(17 + 4 * 5);
+        assertThat(RockSettings.ALL).hasSize(18 + 4 * 5);
+        assertThat(EcologySettings.apply(EcologyParameters.ALPS, new EngineSettings())).isEqualTo(EcologyParameters.ALPS);
+        settings.set(EcologySettings.TREE_MAX_SLOPE, 40f);
+        assertThat(EcologySettings.apply(EcologyParameters.ALPS, settings).woody().maxSlope()).isEqualTo(40);
+        assertThat(EcologySettings.ALL).hasSize(2);
         assertThat(RockSettings.ALL.stream().map(s -> s.name()).distinct().count()).isEqualTo(RockSettings.ALL.size());
     }
 

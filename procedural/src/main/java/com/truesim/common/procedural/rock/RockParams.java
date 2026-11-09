@@ -51,11 +51,16 @@ public record RockParams(String name, double size, double elongation, double fla
      * @param facets how far the surface follows the planes (1) rather than a smooth ellipsoid (0)
      * @param chips small planes that knock corners off, showing fresh stone
      * @param chipDepth how deep a chip cuts into the corner, as a fraction of the size
+     * @param irregularity how far each stone's proportions stray from the preset's, 0 to 1 (its length, width and
+     *     height each scaled by up to this share either way, from its seed)
      */
     public record Fractures(int planes, double near, double far, double joints, double facets, int chips,
-        double chipDepth) {
+        double chipDepth, double irregularity) {
 
         public Fractures {
+            if (!(irregularity >= 0 && irregularity < 1)) {
+                throw new IllegalArgumentException("Irregularity is 0 to 1, got " + irregularity);
+            }
             if (planes < 0 || chips < 0 || planes + chips > 48) {
                 throw new IllegalArgumentException("0 to 48 planes and chips, got " + planes + " and " + chips);
             }
@@ -80,28 +85,34 @@ public record RockParams(String name, double size, double elongation, double fla
      * @param groove the depth of the grooves where beds meet
      * @param recess how far softer beds weather back (each bed its own share of it)
      * @param dip how far the beds tilt from level, degrees
+     * @param waviness how far the beds' boundaries wander, as a share of their thickness (uneven beds: their
+     *     thickness varies across the stone and from bed to bed)
      */
-    public record Bedding(double thickness, double groove, double recess, double dip) {
+    public record Bedding(double thickness, double groove, double recess, double dip, double waviness) {
 
         /** No bedding. */
-        public static final Bedding NONE = new Bedding(0, 0, 0, 0);
+        public static final Bedding NONE = new Bedding(0, 0, 0, 0, 0);
     }
 
     /**
-     * A pile of stones (cleared from a field, or fallen together), each its own closed surface.
+     * Several stones in one model, each its own closed surface: a heaped pile (cleared from a field, fallen together)
+     * or a flat patch of debris (scree between the blocks of a talus, drawn as one model from afar).
      *
      * @param members how many stones (1: a single rock)
-     * @param spread how far the others lie from the first, as a multiple of their radii added (below 1: leaning in)
-     * @param shrink each further stone's size relative to the one before, about
+     * @param spread a pile: how far the others lie from the first, as a multiple of their radii added (below 1:
+     *     leaning in); a patch: the patch's radius, as a multiple of the size
+     * @param shrink a pile: each further stone's size relative to the one before, about; a patch: the smallest
+     *     stone's size relative to the largest (sizes between follow a power law, many small, few large)
+     * @param heap a pile heaped in two courses (true) or a patch spread flat over a disc (false: a sunflower spiral)
      */
-    public record Cluster(int members, double spread, double shrink) {
+    public record Cluster(int members, double spread, double shrink, boolean heap) {
 
         /** A single rock. */
-        public static final Cluster SINGLE = new Cluster(1, 0, 1);
+        public static final Cluster SINGLE = new Cluster(1, 0, 1, true);
 
         public Cluster {
-            if (members < 1 || members > 16) {
-                throw new IllegalArgumentException("1 to 16 members, got " + members);
+            if (members < 1 || members > 64) {
+                throw new IllegalArgumentException("1 to 64 members, got " + members);
             }
         }
     }
@@ -133,6 +144,9 @@ public record RockParams(String name, double size, double elongation, double fla
         if (cluster.members() == 1) {
             return one;
         }
+        if (!cluster.heap()) {
+            return size * cluster.spread() + one;
+        }
         return one * (1 + 2 * cluster.spread() * cluster.shrink());
     }
 
@@ -143,41 +157,53 @@ public record RockParams(String name, double size, double elongation, double fla
 
     private static final List<Integer> LEVELS = List.of(5, 4, 3, 2);
 
-    /** A rounded boulder, weathered smooth with shallow gullies: stream beds, forest floors. */
-    public static final RockParams BOULDER = new RockParams("boulder", 1.2, 1.25, 0.8,
-        new Fractures(10, 0.7, 0.95, 0, 0.7, 0, 0), new Weathering(0.22, 0.12, 0.05, 0.012), Bedding.NONE,
+    /**
+     * A boulder, worn round at its edges but still showing a few large fracture facets: stream beds, forest floors.
+     */
+    public static final RockParams BOULDER = new RockParams("boulder", 1.2, 1.25, 0.75,
+        new Fractures(7, 0.74, 0.95, 0, 0.92, 0, 0, 0.25), new Weathering(0.12, 0.035, 0.015, 0.006), Bedding.NONE,
         Cluster.SINGLE, 0.15, LEVELS);
     /**
-     * A limestone block fallen from a cliff: bounded by its bedding and two joint sets, corners chipped off, the beds
-     * grooved where they meet. Talus and rockfall.
+     * A limestone block fallen from a cliff: angular, bounded by sharp fracture faces (its joints turned well off
+     * square, deep random fractures), corners chipped off, its bedding only faint uneven lines; proportions varying
+     * stone by stone. Talus and rockfall.
      */
-    public static final RockParams BLOCK = new RockParams("block", 1.0, 1.15, 0.8,
-        new Fractures(4, 0.78, 0.95, 0.9, 1, 5, 0.12), new Weathering(0.035, 0.02, 0.025, 0.02),
-        new Bedding(0.28, 0.025, 0.03, 6), Cluster.SINGLE, 0.1, LEVELS);
-    /** A flat slab of bedded limestone, split along its beds. */
-    public static final RockParams SLAB = new RockParams("slab", 1.4, 1.35, 0.32,
-        new Fractures(5, 0.7, 0.92, 1, 1, 4, 0.1), new Weathering(0.06, 0.05, 0.03, 0.02),
-        new Bedding(0.12, 0.02, 0.025, 3), Cluster.SINGLE, 0.2, LEVELS);
+    public static final RockParams BLOCK = new RockParams("block", 1.0, 1.2, 0.8,
+        new Fractures(6, 0.52, 0.88, 0.45, 1, 4, 0.16, 0.35), new Weathering(0.012, 0.01, 0.01, 0.008),
+        new Bedding(0.42, 0.006, 0.006, 8, 0.3), Cluster.SINGLE, 0.1, LEVELS);
+    /** A slab of limestone split along a bedding plane, its edges broken across: thin, angular, irregular. */
+    public static final RockParams SLAB = new RockParams("slab", 1.3, 1.3, 0.38,
+        new Fractures(7, 0.55, 0.9, 0.6, 1, 3, 0.14, 0.3), new Weathering(0.015, 0.012, 0.01, 0.008),
+        new Bedding(0.5, 0.005, 0.005, 4, 0.3), Cluster.SINGLE, 0.15, LEVELS);
     /** Scree: a small sharp stone, the debris below Alpine cliffs. */
     public static final RockParams SCREE = new RockParams("scree", 0.25, 1.3, 0.7,
-        new Fractures(8, 0.62, 0.9, 0.5, 1, 2, 0.12), new Weathering(0.03, 0.06, 0.04, 0.015), Bedding.NONE,
+        new Fractures(8, 0.55, 0.9, 0.4, 1, 2, 0.14, 0.35), new Weathering(0.01, 0.01, 0.01, 0.005), Bedding.NONE,
         Cluster.SINGLE, 0.1, List.of(4, 3, 2, 1));
     /**
-     * A glacial erratic: a big rounded boulder of crystalline rock the ice left on the valley's floor and terraces,
-     * lichened, little buried.
+     * A glacial erratic: a big boulder of crystalline rock the ice left on the valley's floor and terraces, its large
+     * facets rounded, lichened, little buried.
      */
     public static final RockParams ERRATIC = new RockParams("erratic", 2.6, 1.3, 0.7,
-        new Fractures(12, 0.72, 0.98, 0, 0.55, 2, 0.06), new Weathering(0.3, 0.14, 0.04, 0.02), Bedding.NONE,
+        new Fractures(9, 0.74, 0.97, 0, 0.88, 2, 0.06, 0.25), new Weathering(0.16, 0.04, 0.015, 0.01), Bedding.NONE,
         Cluster.SINGLE, 0.2, LEVELS);
     /**
      * A clearance pile: stones picked off a meadow and heaped at its edge, rounded and mossy, leaning on one another.
      */
     public static final RockParams CLUSTER = new RockParams("cluster", 0.45, 1.2, 0.75,
-        new Fractures(8, 0.68, 0.95, 0.3, 0.8, 1, 0.1), new Weathering(0.15, 0.1, 0.04, 0.012),
-        new Bedding(0.3, 0.015, 0.02, 10), new Cluster(7, 0.75, 0.82), 0.25, List.of(4, 3, 2, 1));
+        new Fractures(8, 0.68, 0.95, 0.3, 0.85, 1, 0.1, 0.3), new Weathering(0.1, 0.04, 0.015, 0.008),
+        new Bedding(0.4, 0.006, 0.006, 10, 0.3), new Cluster(7, 0.75, 0.82, true), 0.25, List.of(4, 3, 2, 1));
+    /**
+     * A patch of talus debris: 64 angular stones from 3 to 25 cm (the largest about this preset's size) spread over a
+     * disc about 1.1 m across by a power law, many small and few large: the scree between a talus' blocks drawn as
+     * one model, its coarse levels far away (near the camera, single stones).
+     */
+    public static final RockParams SCREE_PATCH = new RockParams("scree-patch", 0.12, 1.3, 0.7,
+        new Fractures(7, 0.55, 0.9, 0.4, 1, 1, 0.14, 0.35), new Weathering(0.01, 0.01, 0.01, 0.005), Bedding.NONE,
+        new Cluster(64, 4.5, 0.12, false), 0.25, List.of(2, 1, 0));
 
     /** Every preset. */
-    public static final List<RockParams> PRESETS = List.of(BOULDER, BLOCK, SLAB, SCREE, ERRATIC, CLUSTER);
+    public static final List<RockParams> PRESETS = List.of(BOULDER, BLOCK, SLAB, SCREE, ERRATIC, CLUSTER,
+        SCREE_PATCH);
 
     /** The preset named {@code name}. */
     public static RockParams preset(String name) {
