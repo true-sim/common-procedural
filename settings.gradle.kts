@@ -31,6 +31,10 @@ project(":common-procedural-ecology").projectDir = file("ecology")
 include("common-procedural-ecology-terrain")
 project(":common-procedural-ecology-terrain").projectDir = file("ecology-terrain")
 
+// Water: channel networks from the terrain's flow (or mapped watercourses), river surfaces, beds, stones, waterfalls.
+include("common-procedural-water")
+project(":common-procedural-water").projectDir = file("water")
+
 // Procedural assets through the scene's asset system: recipe files imported into meshes and models, cached.
 include("common-procedural-assets")
 project(":common-procedural-assets").projectDir = file("assets")

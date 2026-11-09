@@ -9,6 +9,7 @@ description = "Procedural assets through true-sim's scene asset system: recipe f
 dependencies {
     api(project(":common-procedural"))
     api(project(":common-procedural-ecology")) // ecology recipes
+    api(project(":common-procedural-water")) // water recipes, river and waterfall meshes
     api("com.truesim.scene:scene-assets:0.70.0") // the asset cache, paths, importers
     api("com.truesim.scene:scene-render:0.70.0") // meshes, models and materials as render assets
     implementation("com.truesim.scene:scene-meshbuild:0.70.0") // meshlets
