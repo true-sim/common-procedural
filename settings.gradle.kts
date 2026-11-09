@@ -35,6 +35,11 @@ project(":common-procedural-ecology-terrain").projectDir = file("ecology-terrain
 include("common-procedural-water")
 project(":common-procedural-water").projectDir = file("water")
 
+// Settlements: a village's plan on the terrain (roads, square, plots, buildings as specs, props, fences), clearings,
+// grading and road meshes.
+include("common-procedural-settlement")
+project(":common-procedural-settlement").projectDir = file("settlement")
+
 // Procedural assets through the scene's asset system: recipe files imported into meshes and models, cached.
 include("common-procedural-assets")
 project(":common-procedural-assets").projectDir = file("assets")

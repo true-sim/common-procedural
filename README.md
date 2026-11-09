@@ -13,7 +13,8 @@ recipe files.
 | `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances |
 | `common-procedural-ecology-terrain` | `com.truesim.common.procedural.ecology.terrain` | the ecology over effects-terrain's surface and layers (optional) |
 | `common-procedural-water` | `com.truesim.common.procedural.water` | rivers, streams and waterfalls: channel networks from the flow or mapped watercourses, hydraulic geometry, surface meshes with the flow per vertex, carved beds and banks, bed stones, falls with sheets, jets, spray and mist |
-| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, plants, rocks, fences, ecologies) imported as scene meshes, models, textures and recipes, generated in the background, cached |
+| `common-procedural-settlement` | `com.truesim.common.procedural.settlement` | a village's plan on the terrain: roads by least-cost paths, the square, plots, buildings as specs, props, lamps, fences; clearings, grading, road meshes |
+| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, plants, rocks, fences, ecologies, settlements) imported as scene meshes, models, textures and recipes, generated in the background, cached |
 | `preview` (not published) | | pictures and films through the engine, with a minimal tree material reading the wind format |
 
 ```kotlin
@@ -316,6 +317,156 @@ day = 150                     # or season = spring
 material.foliage = game://materials/plant.material      # base color: game://meadow/gentian-a.plant#palette
 material.flowers = game://materials/flowers.material
 ```
+
+## Settlements: roads, plots and buildings
+
+A village's plan on any terrain, from the ecology's heights, hydrology and land use: the plan the showcase drew by hand
+(true-sim/samples#2), generated. It follows Emilien et al., "Procedural Generation of Villages on Arbitrary Terrains"
+(The Visual Computer 2012): roads grown over the terrain by least-cost paths, parcels along them, buildings sited by
+slope, sun and access.
+
+```java
+Ecology ecology = new Ecology(TerrainEcology.of(surface, 2), EcologyParameters.ALPS, AlpineSpecies.ALL);
+Settlement village = Settlements.plan(SettlementParameters.DEFAULTS, ecology, -130, 300, 7);  // the square's centre
+village.roads();          // centre lines with graded heights, by class and surface
+village.buildings();      // BuildingSpec (kind, footprint, floors, ridge, seed) placed: x, y, z, yaw, foundation
+village.props();          // typed anchors: FOUNTAIN, BENCH, TABLE_SET, WOODPILE, SIGNPOST, ROCK, ...
+village.lamps();          // posts beside the lanes, turned to them
+village.fences();         // polylines (GARDEN, PASTURE) for the fence generator
+village.clearing();       // trees(x, z), grass(x, z): what the ecology and the grass keep off
+village.grading();        // height(x, z, terrain): the terrain under the roads and the square, cut and filled
+village.roadMeshes();     // RoadMeshes.Tile: 64 m tiles, slots cobbles, gravel, dirt, kerb, steps
+```
+
+The steps (`Planner`), each drawing from its own stream of the seed:
+
+1. **The main road** along the valley, through the origin: least-cost paths to the two points of a ring about it that
+   lie nearest its height on opposite sides (the valley's way; on Lauterbrunnen's floor, north and south).
+2. **The square** on it, its length along the road, its surface a plane fitted to the ground; the inn on its northern
+   side (its front to the square and the sun), the church across, both fronts to the square.
+3. **Lanes, farm tracks and footpaths**, each from the network to a destination chosen per sector of a ring
+   (buildable ground for lanes, meadow for tracks, height for footpaths).
+4. **Plots** along the main road, lanes and tracks: frontages walked along each side, small and close in the core,
+   larger and sparser out to the village's radius, a farmstead's two at a track's end; kept off every road (half its
+   width and half the verge), the square, each other, flood-prone and steep ground.
+5. **Buildings** in the plots: houses in the core fronting their road; outside it facing the valley and the sun (the
+   way down the slope blended with the south) where the footprint fits, else their road; a farmstead's farmhouse and
+   barn. Ground floors at the highest ground under the footprint, foundations to the lowest.
+6. **Hay barns** on the ecology's meadows (a jittered grid's candidates), each with a footpath to the network.
+7. **Lamps** along the main road and lanes in the village and round the square, **fences** round the gardens (sides
+   and back) and along the pastures beside tracks and the main road outside the village, **props** (the square's
+   fountain, benches, the inn's terrace and planters, a bench, woodpile and barrel or crate by each house, a trough at
+   farmsteads, signposts where footpaths leave the roads, rocks, boulders and stumps on the meadows).
+
+### Roads over the terrain (`Router`)
+
+An anisotropic least-cost path (after Galin et al., "Procedural Generation of Roads", Eurographics 2010) over a 4 m
+grid, A* from every node of the network at once to the destination. Steps reach up to four nodes in every direction
+they can (48 directions, 4 to 11 degrees apart), so a road can traverse a steep slope at a shallow angle; nodes passed
+over must be passable. A step costs its length times `1 + gradeWeight (grade / maxGrade)^2 + sideWeight
+(tan slope / tan maxSideSlope)^2 + wetWeight wetland + floodWeight flood + bridgeWeight water`; steps steeper than the
+class's grade (times a headroom) or over ground steeper than the class crosses are not taken. The search's state is
+a node and the direction it was reached in, so turns cost `turnWeight a (1 + a)` for `a` radians: a road that must
+climb more steeply than its grade traverses and turns back in hairpins, switchbacks with long legs. Steps along
+existing roads cost `reuse` of their length, so roads join the network rather than run beside it. A breadth-first
+flood first tells whether the destination can be reached at all; the heuristic is the least a way can cost given the
+height to climb at the class's grade (evenly is cheapest: the cost is convex in the grade).
+
+| Class | Width | Steepest grade | Steepest ground | Surface |
+|---|---|---|---|---|
+| main road | 6 m | 10 % | 24° | cobbles in the core, gravel beyond |
+| lanes (6) | 4 m | 12 % | 26° | cobbles in the core, gravel beyond |
+| farm tracks (6) | 3 m | 16 % | 30° | gravel |
+| footpaths (4, and the barns') | 1.4 m | 35 % (steps above 20 %) | 38° | dirt, stone steps |
+
+A route is split where it runs along the network, each run a road joining it at its ends (snapped onto the road or
+the square's edge it meets), smoothed by Chaikin's corner cutting, resampled every 2 m. **The profile**: the ground's
+heights under it, eased by a 12 m moving mean, its ends at the heights of what they join, then kept within the class's
+grade by clamping passes (forward from a fixed start, backward from a fixed end): the cuts and fills.
+
+### Hydrology and siting
+
+Ground is **flood-prone** where the ecology's hydrology has open water or wetland, or where it lies lower above its
+drainage (HAND, height above the nearest drainage) than `floodHeight` plus `floodPerRoot` per square root of the
+drainage's catchment in square kilometres: a big river rises higher than a brook. Plots and footprints keep off it and
+off slopes over `maxSlope` (barns: their own); roads pay to cross it. Hay barns stand only where the ecology's land use
+keeps meadows.
+
+### The terrain, the ecology and the renderer
+
+- **Grading** (`Grading`, a 1 m raster over the plan): under each road its crown less the camber across its width,
+  beyond its edges a batter slope back to the ground (cut or fill); under the square its plane. A terrain that takes
+  `height(x, z, terrain)` lies exactly under the road meshes.
+- **Clearings** (`Clearing`, the same raster): `trees(x, z)` is 0 on the roads, the square and the buildings and a
+  margin round them, and on the plots (gardens and yards), fading over 2 m; `grass(x, z)` is 0 on what is paved or
+  built (roads and their kerbs, steps, the square, footprints): the ground-cover mask.
+- **Road meshes** (`RoadMeshes`): each road's surface swept along its graded centre line in strips (its camber), a
+  short skirt into the ground; the square's cobbles on its plane; kerbs (0.3 by 0.14 m) along the cobbled roads and
+  round the square, open where another road's surface covers them; stone steps (0.17 m rises) where a footpath is
+  steeper than 20 %: treads spanning the flight evenly, risers, sides. World-aligned 64 m tiles, positions relative to
+  each tile's corner, five material slots always present, planar texture coordinates.
+
+### Buildings, props and fences: where the plan meets the other generators
+
+A **`BuildingSpec`** is what the buildings generator is asked to build: `kind` (CHURCH, INN, HOUSE, FARMHOUSE,
+HAY_BARN), `width` across the front and `depth`, `floors`, `ridge` (ACROSS: the ridge parallel to the front, eaves to
+the front and the valley, the default; ALONG: a gable front) and a `seed`. It is built in its own frame (x across, z
+along with +z its front, y up from the ground floor, the foundation reaching below); the plan's `Building` places it:
+`x`, `z`, `yaw` (its front faces `(sin yaw, cos yaw)`), `y` its ground floor's height (the highest ground under it)
+and `foundation` (the lowest). The showcase's `Buildings.Spec(kind, width, depth, ground, upper, pitch, seed)` maps
+onto it: CHALET for HOUSE and FARMHOUSE, CAFE for INN, CHURCH for CHURCH.
+
+A **`Fence`** is a polyline on the ground (x, y, z) of a kind (GARDEN round a plot's sides and back, PASTURE along a
+track), posts and rails the fence generator's. A **`Prop`** is an anchor: a `PropKind`, a position on the graded
+ground, a turn and the building it belongs to.
+
+### As an asset
+
+A `.settlement` recipe (the square's origin, seed, extent, a material per slot) loads through the asset manager
+(`SettlementAssets.install(paths)`); its plan on an ecology is a generated asset, made on the asset lane with its road
+meshes (`SettlementAssets.plan(recipe, ecology, parameters)`); its roads are generated models, one per tile, with the
+recipe's materials (`SettlementAssets.roads(paths, recipe, plan)`). Every tunable (79 of them: grades, widths, counts,
+radii, plot sizes, siting, barns, lamps and fences, mesh and grading sizes) is an engine setting
+(`SettlementSettings`, `procedural.settlement.*`); `SettlementSettings.parameters(settings)` reads them.
+
+```
+# game://village/lauterbrunnen.settlement
+origin = -130 300
+seed = 7
+material.cobbles = game://materials/cobbles.material
+material.gravel = game://materials/gravel.material
+material.dirt = game://materials/trail.material
+material.kerb = game://materials/granite.material
+material.steps = game://materials/granite.material
+```
+
+### Tested
+
+On a synthetic Alpine valley (and on Lauterbrunnen where effects-terrain's cache holds it): every road stays within
+its class's grade between every two points; no plot comes nearer a road than half its width, overlaps another or the
+square; every road joins the network and so the square, every building stands in a plot whose front is on a road (or,
+a barn, at its footpath's end); no building stands on open water or lower above its drainage than the flood height,
+nor on ground steeper than allowed; a lane up a 22° slope climbs in switchbacks within its grade; the road meshes'
+tiles carry every slot, the surfaces lie on the grading, the clearings keep trees off roads, plots, square and
+buildings and grass off what is paved; the same inputs give the same plan; a recipe file through the real asset cache
+gives the plan the direct API gives, and its road tiles as models.
+
+A plan of the showcase's village takes about 5 s on Lauterbrunnen (half of it the ecology's terrain analysis), 10 s on
+the synthetic valley's steeper sides (its footpaths' searches).
+
+**Pictures** of plans from above: `TRUESIM_PICTURES=true ./gradlew :common-procedural-settlement:test --tests
+'*PlanPictures*' -Ppictures=<dir>`. **The film** (the plan growing, then a low flight over the road meshes on the graded
+terrain): `TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true :preview:test --tests '*SettlementFilm*'
+-Pfilms=<dir>`.
+
+### What it does not do (yet)
+
+- The ecology has no hook for clearings: its instances are kept where `clearing().trees(x, z)` is high by the caller
+  (the showcase filters them as it does now).
+- effects-terrain does not yet take the grading: a terrain that does lies under the roads; without it the roads' skirts
+  hide small gaps and cuts sink under the ground.
+- Bridges are road surfaces over the water, no deck or piers; no retaining walls at the cuts.
+- One village per plan; no growth over time.
 
 ## The vertex format and the wind data
 
