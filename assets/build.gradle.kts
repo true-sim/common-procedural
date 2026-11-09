@@ -12,6 +12,7 @@ dependencies {
     api("com.truesim.scene:scene-assets:0.70.0") // the asset cache, paths, importers
     api("com.truesim.scene:scene-render:0.70.0") // meshes, models and materials as render assets
     implementation("com.truesim.scene:scene-meshbuild:0.70.0") // meshlets
+    api("com.truesim.engine:engine-settings:0.198.0") // ProceduralSettings: declared settings, no GPU
 }
 
 // meshoptimizer through LWJGL
