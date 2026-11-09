@@ -111,9 +111,9 @@ final class WaterMeshes {
         double ox = channel.x(fall.lip());
         double oy = channel.surface(fall.lip());
         double oz = channel.z(fall.lip());
-        Waterfall.Path path = fall.path();
         double dx = channel.directionX(fall.lip());
         double dz = channel.directionZ(fall.lip());
+        Waterfall.Path path = smooth(fall.path(), dx, dz);
         double rx = -dz;
         double rz = dx;
         WaterParameters.Falls f = p.falls();
@@ -141,8 +141,54 @@ final class WaterMeshes {
             }
         }
         w.nextSubmesh();
-        jets(w, fall, ox, oy, oz, dx, dz);
+        jets(w, fall, path, ox, oy, oz, dx, dz);
         return w.build();
+    }
+
+    /**
+     * {@code path} with its steps out from the face smoothed: where the path is held off the cliff it jumps outward
+     * at ledges, which a sheet drawn through it shows as hard horizontal ledges. Each sample's distance out along the
+     * fall's direction becomes the larger of its own and the mean of its neighbours' (a window of a twentieth of the
+     * samples, at least three each side), twice: the jumps become ramps, and no sample comes closer to the rock than
+     * the path held it.
+     */
+    static Waterfall.Path smooth(Waterfall.Path path, double dx, double dz) {
+        int n = path.count();
+        if (n < 3) {
+            return path;
+        }
+        double x0 = path.x()[0];
+        double z0 = path.z()[0];
+        double[] out = new double[n];
+        double[] side = new double[n];
+        for (int k = 0; k < n; k++) {
+            double ex = path.x()[k] - x0;
+            double ez = path.z()[k] - z0;
+            out[k] = ex * dx + ez * dz;
+            side[k] = -ex * dz + ez * dx;
+        }
+        int half = Math.max(3, n / 20);
+        for (int round = 0; round < 2; round++) {
+            double[] next = out.clone();
+            for (int k = 1; k < n; k++) {
+                double sum = 0;
+                int count = 0;
+                for (int j = Math.max(0, k - half); j <= Math.min(n - 1, k + half); j++) {
+                    sum += out[j];
+                    count++;
+                }
+                next[k] = Math.max(out[k], sum / count);
+            }
+            out = next;
+        }
+        double[] x = new double[n];
+        double[] z = new double[n];
+        for (int k = 0; k < n; k++) {
+            x[k] = x0 + dx * out[k] - dz * side[k];
+            z[k] = z0 + dz * out[k] + dx * side[k];
+        }
+        return new Waterfall.Path(x, path.y().clone(), z, path.vx().clone(), path.vy().clone(), path.vz().clone(),
+            path.time().clone(), path.width().clone());
     }
 
     /**
@@ -150,9 +196,9 @@ final class WaterMeshes {
      * little below the break-up down to where it has atomised (an exponential length of mean half the atomisation
      * length), drifting sideways and narrowing.
      */
-    private void jets(Writer w, Waterfall fall, double ox, double oy, double oz, double dx, double dz) {
+    private void jets(Writer w, Waterfall fall, Waterfall.Path path, double ox, double oy, double oz, double dx,
+        double dz) {
         WaterParameters.Falls f = p.falls();
-        Waterfall.Path path = fall.path();
         double height = fall.height();
         if (path.count() < 2 || fall.breakup() >= height) {
             return;
