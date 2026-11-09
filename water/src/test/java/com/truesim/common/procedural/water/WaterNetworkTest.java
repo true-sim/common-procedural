@@ -397,8 +397,8 @@ class WaterNetworkTest {
                 steepest = Math.max(steepest, Math.abs(smooth.z()[k] - smooth.z()[k - 1]));
             }
         }
-        assertTrue(steepest < 3, "the 6 m ledge spread over samples: " + steepest);
-        assertEquals(0, smooth.z()[0], 1e-12);
+        assertTrue(steepest <= WaterMeshes.LEAN * 2 + 1e-9, "the 6 m ledge spread as a lean: " + steepest);
+        assertTrue(-smooth.z()[10] > 0, "leaning out ahead of the ledge below");
         assertTrue(WaterMeshes.smooth(new Waterfall.Path(new double[2], new double[2], new double[2], new double[2],
             new double[2], new double[2], new double[2], new double[2]), 1, 0).count() == 2);
     }
