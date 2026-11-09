@@ -1,18 +1,19 @@
 # common-procedural
 
 Procedural assets for true-sim, generated deterministically from parameters and a seed: trees and shrubs with their
-flowers, fruits and cones through the year, meadow flowers, grass and wetland clumps, rocks, and more to come
+flowers, fruits and cones through the year, meadow flowers, grass and wetland clumps, rocks,
+[fences and walls](#fences) along a line over the ground, and more to come
 ([roadmap](#roadmap)), and the [ecology](#ecology-which-plants-grow-where) that decides which plants grow where.
 The generators are engine-agnostic (common-math only); a second module brings them into the scene's asset system as
 recipe files.
 
 | Module | Package | Contents |
 |---|---|---|
-| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks, their meshes |
+| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks, fences, their meshes |
 | `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances |
 | `common-procedural-ecology-terrain` | `com.truesim.common.procedural.ecology.terrain` | the ecology over effects-terrain's surface and layers (optional) |
 | `common-procedural-water` | `com.truesim.common.procedural.water` | rivers, streams and waterfalls: channel networks from the flow or mapped watercourses, hydraulic geometry, surface meshes with the flow per vertex, carved beds and banks, bed stones, falls with sheets, jets, spray and mist |
-| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, plants, rocks, ecologies) imported as scene meshes, models, textures and recipes, generated in the background, cached |
+| `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, plants, rocks, fences, ecologies) imported as scene meshes, models, textures and recipes, generated in the background, cached |
 | `preview` (not published) | | pictures and films through the engine, with a minimal tree material reading the wind format |
 
 ```kotlin
@@ -384,6 +385,119 @@ fractal noise, carved by ridged noise (crests and gullies, as weathering leaves)
 cells, banded by strata, and cut flat where buried. Presets `BOULDER`, `BLOCK`, `SLAB`, `SCREE`; four levels (20 · 4^n
 triangles), each closed and wound outward, its error the largest gap between its edges and the surface. UV is a planar
 projection from above in metres (rock materials usually map triplanar); wind is zero. More is #1.
+
+## Fences
+
+`Fences.generate(FenceType, FenceOptions, line, ground, seed)` (or a `FenceGenerator` per thread): a fence along a
+line of x, z points over a ground, any height function `(x, z) -> y` (`FenceGround`; a terrain's height query as it
+is). For the Alpine village first: Lauterbrunnen's pastures are fenced with weathered post and rail, Schärhag and
+Stangenzaun, its gardens with pickets, its fields bounded by dry-stone walls of gneiss.
+
+```java
+double[] line = {0, 0, 12, 3, 20, 9};                                       // x, z pairs, the ground's frame
+Fence fence = Fences.generate(FenceType.SCHAERHAG, FenceOptions.DEFAULTS.withWood(FenceMaterial.WEATHERED_LARCH)
+    .withMoss(0.6).withGates(List.of(10.0), 1.2), line, terrain::height, 7);
+ProceduralMesh near = fence.lods().getFirst();      // submeshes: 0 wood, 1 stone, 2 metal (some empty)
+Vec3 at = fence.origin();                           // the mesh's origin: the line's first point on the ground
+List<FencePiece> posts = fence.pieces(FencePiece.Role.POST);   // where every piece is, in the ground's frame
+```
+
+| Preset (`FenceType`) | Kind | What it is |
+|---|---|---|
+| `POST_AND_RAIL`, `POST_AND_THREE_RAILS` | `POST_AND_RAIL` | round posts, two or three round rails set into them |
+| `SCHAERHAG` | `SPLIT_RAIL` | the Swiss Schärhag: split rails (quarter logs) in a zigzag, six to a bay, stacked where they cross, held by a pair of stakes lashed with withy rings at each crossing |
+| `PICKET` | `PICKET` | square posts, two sawn rails, pointed pickets on their front |
+| `WATTLE` | `WATTLE` | stakes with rods woven in front of and behind alternate stakes, rows alternating, each rod four to six stakes long |
+| `BOARD` | `BOARD` | square posts, horizontal boards nailed across their front |
+| `STANGENZAUN` | `STANGENZAUN` | the Alpine Stangenzaun: slanted poles laid along the fence between pairs of posts lashed with withy rings |
+| `DRY_STONE` | `DRY_STONE` | a dry-stone wall: battered courses of cleaved stones, upright coping stones on top, corner stones |
+| `WIRE` | `WIRE` | round posts, four strands of galvanised wire |
+
+Their dimensions are the record's (`withRails`, `withHeight`, `withSpacing`); each field's meaning per kind is in
+`FenceType`'s documentation.
+
+- **On the ground, critically.** Every post and stake stands on the ground at its own place: its height counts from
+  the ground at its centre, its foot goes `sink` (0.3 m) below the *lowest* ground around it, so on a slope its
+  downhill side is buried too. Rails, boards and wire run from post to post at their heights above *each post's*
+  ground, so they follow the slope between posts; they sag, and are lifted where the ground between rises toward them.
+  Pickets, wattle rods and every stone take the ground at their own place; a wall's courses step with the ground and
+  each stone tilts with half its slope; a coarse level's wall and wattle panels sample the ground every `groundStep`.
+  Gates are level (their foot clears the highest ground under them).
+- **Posts at corners:** a post at every corner of the line (and at both ends), bays evenly between, about `spacing`
+  apart; split rails zigzag across the line; Stangenzaun poles bend a little to follow a curving line.
+- **Materials** (`FenceMaterial`): `WEATHERED_SPRUCE` (silver grey), `WEATHERED_LARCH` (darker, warmer),
+  `FRESH_WOOD`, `PAINTED_RED` (oxblood), `PAINTED_WHITE`, `PAINTED_GREEN`, `GNEISS`, `LIMESTONE`, `GALVANISED`; wood,
+  stone and metal in `FenceOptions`. Albedos from published reflectances (silvered softwood about 0.26, gneiss 0.25,
+  zinc 0.6).
+- **Wear per instance** (`FenceOptions`, 0 to 1): `weathering` (fresh to silver grey, stronger on faces turned up;
+  paint fades and shows grey wood board by board; zinc dulls and rusts), `lichen` (grey-green, orange and, on stone,
+  dark patches; more on stone, less on paint), `moss` (at the foot, higher with more moss; on stones' tops), `damage`
+  (missing rails, pickets, boards, rods and poles; rails broken off one post hanging to the ground; boards hanging by
+  a nail; slack wire on the ground; posts leaning; stones missing from the top, fallen beside the wall), `jitter`
+  (posts' lean, spacing, sag, sizes: 0 as drawn, 1 as built by hand). Each piece varies around them by the seed (its
+  shade, its own weathering). Gates: `withGates(centres, width)`, two heavier posts and a braced leaf.
+- **Vertex data:** `ProceduralVertex`'s layout, with fences' meanings (they do not sway): `UV` in metres, u around a
+  piece, v along it from a random offset below 1, restarting on every piece (half floats keep it to millimetres;
+  stones: their own frame); `WIND` (scene `COLOR`) the weathered **albedo**, linear rgb and alpha 1, so a
+  metallic-roughness material with a grey-scale wood or stone texture draws it as it is; `WIND_PIVOT` (scene `UV1`)
+  the moss and lichen amounts at the vertex, for materials adding their own detail. Normals and tangents (along +u)
+  per vertex; flat caps, pointed pickets and post tops, splintered broken ends.
+- **Levels of detail:** three by default. Level 1: round pieces with 5 sides instead of 8 (rods and wire 3), rings at
+  every other point, stones less subdivided; level 2: 3-sided posts and rails, wattle as one woven panel per gap, a
+  wall as two bands of blocks following the ground, lashings dropped. Each level's error is the largest distance its
+  simplification moves a surface. Through the asset manager a model is a cluster hierarchy built from level 0.
+- **Meshlet-friendly:** pieces are written one after another, ring by ring (stones as one welded block each), so
+  their triangles share vertices and stay together; no piece has more than 256 vertices (tested), so a piece is a
+  meshlet or a few.
+- **Tunables are settings** (`FenceTuning`; through the asset manager `FenceSettings`: `procedural.fences.sink`,
+  `procedural.fences.groundStep`, `procedural.fences.sides`, `procedural.fences.levels`, `procedural.fences.level`,
+  and `procedural.models.hierarchy`).
+
+Through the asset manager a fence is a `.fence` recipe (`FenceRecipe`; slots `wood`, `stone`, `metal`), on its own
+ground or on one the game registers by name:
+
+```
+# game://village/meadow.fence
+type = schaerhag
+seed = 7
+line = 0 0, 12 3, 20 9        # x z points in the ground's frame; x y z points carry their own heights
+ground = valley               # flat, line (the points' heights), or a ground registered by that name
+wood = weathered-larch        # stone = gneiss, metal = galvanised
+weathering = 0.8
+lichen = 0.4
+moss = 0.5
+damage = 0.1
+gates = 10                    # gates' centres, metres along the line; gate-width = 1.2
+rails = 5                     # the type's rails (strands, boards, rows, courses), height and spacing
+material.wood = game://materials/fence-wood.material
+```
+
+```java
+FenceAssets fences = new FenceAssets(paths, new GenerationCache(cacheDir)).install();
+fences.ground("valley", terrain::height);                       // for recipes saying ground = valley
+fences.tuning(FenceSettings.tuning(settings)).detail(FenceSettings.detail(settings));
+AssetRef<ModelData> meadow = paths.ref(RenderAssets.MODEL, "game://village/meadow.fence");  // node at the origin
+AssetRef<MeshData> far = paths.ref(RenderAssets.MESH, "game://village/meadow.fence#lod/2");
+AssetRef<ModelData> inCode = fences.model(FenceRecipe.parse(text), terrain::height);
+Fence direct = fences.fence(recipe);                            // the same fence's pieces: posts for collision
+```
+
+A model is one node translated to the fence's origin, so it stands in the ground's frame as it is: spawn it unmoved.
+Recipes with their own ground go through the generation cache (keyed by the recipe, the tuning and
+`FenceGenerator.VERSION`); over a registered ground (a game's terrain, which may change between runs) a fence is
+generated when loaded, in milliseconds.
+
+**Tested** (`FenceTest`, `FenceAssetsTest`), on a hillside rising 25 % with 15 cm swells, along a curving line, for
+every preset: bit-identical per seed; every post's and stake's foot below the ground and its top above it, and every
+vertex of its lowest ring under the ground where that vertex is (no gap on the downhill side); every rail, board and
+strand starting and ending inside a post, as high over the ground at both posts (it follows the slope) and above the
+ground all along; split rails resting between a crossing's stakes, a lashing at each; Stangenzaun poles rising along
+the fence, each passing between a pair of posts; wattle rods starting and ending at stakes, above the ground; a wall's
+stones on the ground, its top as high over the ground everywhere (within 25 cm); a gate's leaf in its gap, no rail
+across it; damage leaving pieces out and stones fallen beside the wall; weathering greying fresh wood; moss at the
+foot; levels coarser, errors growing, unit normals, tangents across them, UVs below 8, colors physical; recipes read,
+written and generating the direct API's fence; through the asset cache, the direct API's meshes and a model at the
+origin, registered grounds, the settings.
 
 ## Ecology: which plants grow where
 
@@ -786,6 +900,9 @@ TRUESIM_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :prev
 TRUESIM_FLORA_FILMS=true ./gradlew -Ptruesim.preview=true -Ptruesim.engine=false :preview:test  # flora
 ```
 
+Fences (`FenceFilms`, with the films and the stills): every fence type in its materials one after another along a
+spiral up a hillside, the camera orbiting slowly; close-ups of each as stills.
+
 Films (1280 x 720, 30 frames a second): a turntable of every species, a small forest in rising wind, the levels of
 detail side by side (spruce and beech: levels 0-2 and the billboard), the seasons (larch through the year, a spruce
 under snow), and the ecology's flight up Lauterbrunnen's side (see [Ecology](#pictures-and-films)). Flora films
@@ -807,7 +924,8 @@ Trees and rocks are in. Next, each an issue:
 - [#2](https://github.com/true-sim/common-procedural/issues/2) Plants, flowers and grass clumps: meadow flowers,
   grass clumps and dwarf shrubs are in; ferns, sedges and heather cushions to come
 - [#3](https://github.com/true-sim/common-procedural/issues/3) Alpine buildings: chalets with roofs and balconies
-- [#4](https://github.com/true-sim/common-procedural/issues/4) Fences and paths
+- [#4](https://github.com/true-sim/common-procedural/issues/4) Fences and paths: fences and walls are in; paths to
+  come
 - [#5](https://github.com/true-sim/common-procedural/issues/5) Procedural textures: bark, rock and tileable materials
 - [#6](https://github.com/true-sim/common-procedural/issues/6) Terrain detail
 - [#7](https://github.com/true-sim/common-procedural/issues/7) Octahedral impostor baking

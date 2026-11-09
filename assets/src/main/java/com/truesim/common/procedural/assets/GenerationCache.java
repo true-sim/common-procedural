@@ -23,6 +23,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -49,17 +50,27 @@ public final class GenerationCache {
     /** The meshes of {@code recipe} by {@code generator}: read from the cache, else generated and written to it. */
     @AllowAllocation("at load time")
     public List<ProceduralMesh> get(ProceduralGenerator generator, Recipe recipe) throws Exception {
+        return get(generator.id(), generator.version(), recipe.generationKey(), () -> generator.generate(recipe));
+    }
+
+    /**
+     * The meshes generator {@code id} of {@code version} makes of what {@code generationKey} describes: read from the
+     * cache, else made by {@code generate} and written to it. For generators with recipes of their own (fences).
+     */
+    @AllowAllocation("at load time")
+    public List<ProceduralMesh> get(String id, int version, String generationKey,
+        Callable<List<ProceduralMesh>> generate) throws Exception {
         if (directory == null) {
             generations.incrementAndGet();
-            return generator.generate(recipe);
+            return generate.call();
         }
-        Path file = directory.resolve(key(generator, recipe) + ".bin");
+        Path file = directory.resolve(key(id, version, generationKey) + ".bin");
         try {
             List<ProceduralMesh> cached = read(file);
             hits.incrementAndGet();
             return cached;
         } catch (NoSuchFileException missing) {
-            List<ProceduralMesh> meshes = generator.generate(recipe);
+            List<ProceduralMesh> meshes = generate.call();
             generations.incrementAndGet();
             write(file, meshes);
             return meshes;
@@ -79,9 +90,14 @@ public final class GenerationCache {
     /** The file name of what {@code generator} makes of {@code recipe}: SHA-256 of the id, version and key. */
     @AllowAllocation("at load time")
     static String key(ProceduralGenerator generator, Recipe recipe) {
+        return key(generator.id(), generator.version(), recipe.generationKey());
+    }
+
+    @AllowAllocation("at load time")
+    static String key(String id, int version, String generationKey) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            String text = generator.id() + "\nversion=" + generator.version() + "\n" + recipe.generationKey();
+            String text = id + "\nversion=" + version + "\n" + generationKey;
             return HexFormat.of().formatHex(digest.digest(text.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("Every JDK has SHA-256", e);
