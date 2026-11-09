@@ -2,9 +2,14 @@ package com.truesim.common.procedural.assets;
 
 import com.truesim.annotations.AllowAllocation;
 import com.truesim.common.procedural.tree.Season;
+import com.truesim.common.procedural.building.BuildingSlot;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * A procedural asset's recipe: which generator, which of its presets, the seed and the options, and the materials of
@@ -25,30 +30,54 @@ import java.util.Locale;
  * </pre>
  *
  * A plant ({@code .plant}, {@code generator = plant}, a {@code PlantSpecies} preset) has the slots {@code foliage}
- * and {@code flowers}.
+ * and {@code flowers}. A building ({@code .building}, {@code generator = building}, a {@code BuildingKind} preset)
+ * has a slot per {@code BuildingSlot} and parameters of its own ({@link #BUILDING_PARAMETERS}):
+ *
+ * <pre>
+ * # village/chalet-a.building
+ * generator = building
+ * preset = chalet          # chalet farmhouse hay-barn church inn woodshed
+ * seed = 7
+ * width = 9.5              # across the front gable, metres (the kind's by default)
+ * depth = 11               # along the ridge
+ * floors = 2
+ * roof = stone-weighted    # shingles slates stone-weighted (the seed's by default)
+ * pitch = 22               # degrees
+ * grade.x = 0.1            # the ground's slope under it: rise per metre across and along (0: level)
+ * grade.z = -0.25
+ * material.stone = game://materials/old-stone-wall.material
+ * material.timber = game://materials/larch-logs.material
+ * </pre>
  *
  * Equal recipes are one asset: a recipe is a value, so it keys generated assets and the generation cache.
  *
- * @param generator the generator's id: {@code tree}, {@code plant} or {@code rock}
+ * @param generator the generator's id: {@code tree}, {@code plant}, {@code rock} or {@code building}
  * @param preset the generator's preset, by name: a {@code TreeSpecies}, {@code PlantSpecies} or {@code RockParams}
- *     preset
+ *     preset, or a {@code BuildingKind}
  * @param seed the seed
  * @param season trees: the season
  * @param snow trees: the snow load
  * @param materials the material paths of the submeshes, by slot (trees: bark, leaves, attachments; plants: foliage,
- *     flowers; rocks: rock); empty strings for none
+ *     flowers; rocks: rock; buildings: their {@code BuildingSlot}s); empty strings for none
  * @param day trees and plants: the day of the year, or NaN for the season's
+ * @param parameters the generator's own parameters, by name (buildings: {@link #BUILDING_PARAMETERS}); empty for
+ *     trees, plants and rocks
  */
 public record Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials,
-    double day) {
+    double day, Map<String, String> parameters) {
 
     /** The material slots of each generator, in submesh order. */
     static final List<String> TREE_SLOTS = List.of("bark", "leaves", "attachments");
     static final List<String> PLANT_SLOTS = List.of("foliage", "flowers");
     static final List<String> ROCK_SLOTS = List.of("rock");
+    static final List<String> BUILDING_SLOTS = BuildingSlot.names();
+    /** A building recipe's own parameters. */
+    public static final Set<String> BUILDING_PARAMETERS = Set.of("width", "depth", "floors", "roof", "pitch",
+        "grade.x", "grade.z");
 
     public Recipe {
         materials = List.copyOf(materials);
+        parameters = Collections.unmodifiableMap(new TreeMap<>(parameters));
         if (!Double.isNaN(day) && !(day >= 0 && day < 366)) {
             throw new IllegalArgumentException("A day of the year is 0 to 365: " + day);
         }
@@ -57,6 +86,12 @@ public record Recipe(String generator, String preset, long seed, Season season, 
     /** A recipe on its season's day. */
     public Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials) {
         this(generator, preset, seed, season, snow, materials, Double.NaN);
+    }
+
+    /** A recipe without parameters of its generator's own. */
+    public Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials,
+        double day) {
+        this(generator, preset, seed, season, snow, materials, day, Map.of());
     }
 
     /** The day of the year it is generated for: its day, else its season's. */
@@ -74,6 +109,7 @@ public record Recipe(String generator, String preset, long seed, Season season, 
         double snow = 0;
         double day = Double.NaN;
         List<String[]> slots = new ArrayList<>();
+        List<String[]> own = new ArrayList<>();
         int number = 0;
         for (String raw : text.split("\n")) {
             number++;
@@ -96,10 +132,11 @@ public record Recipe(String generator, String preset, long seed, Season season, 
                 case "snow" -> snow = Double.parseDouble(value);
                 case "day" -> day = Double.parseDouble(value);
                 default -> {
-                    if (!key.startsWith("material.")) {
-                        throw new IllegalArgumentException("Line " + number + ": unknown key '" + key + "'");
+                    if (key.startsWith("material.")) {
+                        slots.add(new String[] {key.substring("material.".length()), value});
+                    } else {
+                        own.add(new String[] {key, value, Integer.toString(number)});
                     }
-                    slots.add(new String[] {key.substring("material.".length()), value});
                 }
             }
         }
@@ -110,8 +147,16 @@ public record Recipe(String generator, String preset, long seed, Season season, 
             case "tree" -> TREE_SLOTS;
             case "plant" -> PLANT_SLOTS;
             case "rock" -> ROCK_SLOTS;
+            case "building" -> BUILDING_SLOTS;
             default -> throw new IllegalArgumentException("Unknown generator '" + generator + "'");
         };
+        Map<String, String> parameters = new TreeMap<>();
+        for (String[] parameter : own) {
+            if (!"building".equals(generator) || !BUILDING_PARAMETERS.contains(parameter[0])) {
+                throw new IllegalArgumentException("Line " + parameter[2] + ": unknown key '" + parameter[0] + "'");
+            }
+            parameters.put(parameter[0], parameter[1]);
+        }
         String[] materials = new String[names.size()];
         java.util.Arrays.fill(materials, "");
         for (String[] slot : slots) {
@@ -121,17 +166,21 @@ public record Recipe(String generator, String preset, long seed, Season season, 
             }
             materials[index] = slot[1];
         }
-        return new Recipe(generator, preset, seed, season, snow, List.of(materials), day);
+        return new Recipe(generator, preset, seed, season, snow, List.of(materials), day, parameters);
     }
 
     /**
-     * What the generated meshes depend on, as canonical text: the generator, preset, seed and options, not the
-     * materials. Equal keys give identical meshes (for a given generator version).
+     * What the generated meshes depend on, as canonical text: the generator, preset, seed, options and parameters
+     * (in name order), not the materials. Equal keys give identical meshes (for a given generator version).
      */
     @AllowAllocation("at load time")
     public String generationKey() {
+        StringBuilder own = new StringBuilder();
+        for (Map.Entry<String, String> parameter : parameters.entrySet()) {
+            own.append(parameter.getKey()).append('=').append(parameter.getValue()).append('\n');
+        }
         return "generator=" + generator + "\npreset=" + preset + "\nseed=" + seed + "\nseason=" + season.name()
             + "\nsnow=" + Double.doubleToLongBits(snow) + "\n"
-            + (Double.isNaN(day) ? "" : "day=" + Double.doubleToLongBits(day) + "\n");
+            + (Double.isNaN(day) ? "" : "day=" + Double.doubleToLongBits(day) + "\n") + own;
     }
 }
