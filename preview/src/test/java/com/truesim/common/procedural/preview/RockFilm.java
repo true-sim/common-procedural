@@ -89,6 +89,8 @@ class RockFilm {
         {14, 24, 3.5, 10, -22, 3.0, -12, 8, -1, -12, -8, -1, 7, 55},
         {-25, 12, 1.9, -20, -12, 1.9, 60, 8, -4, 60, -8, -4, 6, 50},
     };
+    /** Metres from the cone's centre within which the scree is single stones (patches beyond). */
+    private static final double NEAR_STONES = 70;
     /** The talus cone's centre the shots are framed on: found from the rocks (set in build). */
     private double coneX;
     private double coneZ;
@@ -178,6 +180,14 @@ class RockFilm {
         Ecology plain = new Ecology(ground, parameters, AlpineSpecies.ALL);
         RockField rocks = new RockField(plain, RockFieldParameters.DEFAULTS);
         Ecology ecology = plain.avoiding(rocks);
+        // the talus' fines in the terrain itself: gravel and roughness over the talus of the near area; what is drawn
+        // and the small stones stand on the modified surface, the rocks were worked out from the bare one
+        com.truesim.common.procedural.ecology.terrain.TalusModifier talus =
+            new com.truesim.common.procedural.ecology.terrain.TalusModifier(rocks,
+                com.truesim.common.procedural.ecology.terrain.TalusModifier.Parameters.DEFAULTS,
+                new com.truesim.effects.terrain.data.TerrainModifier.Bounds(X0, Z0, X0 + SIZE, Z0 + SIZE));
+        surface = surface.withModifiers(surface.modifiers().with(talus));
+        ground = TerrainEcology.of(surface, 2);
         long start = System.nanoTime();
         List<EcologyTile> tiles = new ArrayList<>();
         List<RockTile> rockTiles = new ArrayList<>();
@@ -248,6 +258,49 @@ class RockFilm {
         coneX = n == 0 ? -215 : sx / n;
         coneZ = n == 0 ? 225 : sz / n;
         System.out.printf(Locale.ROOT, "the cone: %d rocks round (%.0f, %.0f)%n", n, coneX, coneZ);
+        // the scree between the blocks: single small stones near the cone, patches farther away
+        com.truesim.common.procedural.ecology.rocks.RockScatter scatter =
+            new com.truesim.common.procedural.ecology.rocks.RockScatter(rocks,
+                com.truesim.common.procedural.ecology.rocks.RockScatter.Parameters.DEFAULTS, ground);
+        com.truesim.common.procedural.ecology.rocks.RockScatter.Tile scree = scatter.region(coneX - 220, coneZ - 220,
+            440, 440);
+        int[][] stoneMeshes = new int[scatter.stoneVariants().size()][];
+        for (int v = 0; v < stoneMeshes.length; v++) {
+            RockVariant variant = scatter.stoneVariants().get(v);
+            Rock rock = Rocks.generate(variant.params(), variant.cover(), variant.seed());
+            stoneMeshes[v] = new int[] {stage.addMesh(SceneMeshes.build(rock.lods().get(2), false, true, false)),
+                stage.addMesh(SceneMeshes.build(rock.lods().get(3), false, true, false))};
+        }
+        int[][] patchMeshes = new int[scatter.patchVariants().size()][];
+        for (int v = 0; v < patchMeshes.length; v++) {
+            RockVariant variant = scatter.patchVariants().get(v);
+            Rock rock = Rocks.generate(variant.params(), variant.cover(), variant.seed());
+            patchMeshes[v] = new int[rock.lods().size()];
+            for (int l = 0; l < rock.lods().size(); l++) {
+                patchMeshes[v][l] = stage.addMesh(SceneMeshes.build(rock.lods().get(l), false, true, false));
+            }
+        }
+        int stones = 0;
+        int patches = 0;
+        com.truesim.common.procedural.ecology.rocks.RockScatter.Placed small = scree.stones();
+        com.truesim.common.procedural.ecology.rocks.RockScatter.Placed far = scree.patches();
+        for (int c = 0; c < scree.cells(); c++) {
+            if (Math.hypot(scree.cellX(c) - coneX, scree.cellZ(c) - coneZ) < NEAR_STONES) {
+                for (int i = scree.first(c); i < scree.end(c); i++) {
+                    float s = small.scale(i);
+                    things.add(new Thing(stoneMeshes[small.variant(i)], weathered, false, -1, small.x(i), small.y(i),
+                        small.z(i), new float[] {small.q(i, 0), small.q(i, 1), small.q(i, 2), small.q(i, 3)}, s, s, s,
+                        0.5));
+                    stones++;
+                }
+            } else {
+                float s = far.scale(c);
+                things.add(new Thing(patchMeshes[far.variant(c)], weathered, false, -1, far.x(c), far.y(c), far.z(c),
+                    new float[] {far.q(c, 0), far.q(c, 1), far.q(c, 2), far.q(c, 3)}, s, s, s, 2));
+                patches++;
+            }
+        }
+        System.out.printf(Locale.ROOT, "scree: %d stones near the cone, %d patches%n", stones, patches);
         // trees and shrubs: two variants of each preset in use
         Map<Integer, ProceduralFilms.Placed> kinds = new HashMap<>();
         List<Species> species = ecology.species();
@@ -326,6 +379,7 @@ class RockFilm {
             float[] colors = new float[4 * n * n];
             float[] uvs = new float[2 * n * n];
             float[] color = new float[4];
+            double[] cover = new double[com.truesim.effects.terrain.data.TerrainModifier.MATERIALS];
             for (int j = 0; j < n; j++) {
                 for (int i = 0; i < n; i++) {
                     int a = j * n + i;
@@ -361,6 +415,13 @@ class RockFilm {
                         for (int c = 0; c < 4; c++) {
                             colors[4 * a + c] += (float) (w[k] * color[c]);
                         }
+                    }
+                    // the modifiers' gravel: limestone debris, light grey
+                    java.util.Arrays.fill(cover, 0);
+                    double gravel = surface.materials(x, z, CELL, cover);
+                    double[] debris = {0.2, 0.19, 0.17};
+                    for (int c = 0; c < 3; c++) {
+                        colors[4 * a + c] += (float) (gravel * (debris[c] - colors[4 * a + c]));
                     }
                 }
             }

@@ -541,26 +541,32 @@ RockFootprint contact = block.footprint();          // its contact with the grou
 levels sample one surface:
 
 1. **Fracture planes:** a convex polytope, the intersection of half-spaces. A limestone block is bounded by its
-   bedding (a pair of planes on bed boundaries, dipping a few degrees) and two joint sets at right angles to it and to
-   each other (turned off square by `1 - joints`), then random fracture planes. Edges are rounded by weathering as a
-   soft minimum of the planes' distances (`-s log sum exp(-r/s)`), blended toward an ellipsoid for rounded boulders.
+   bedding (a pair of planes on bed boundaries, dipping a few degrees) and two joint sets across it (turned off square
+   by `1 - joints`: a block's by up to 19 degrees), then deep random fracture planes (from 0.52 of its radius), so it
+   is angular and irregular rather than a stack of plates. Edges are rounded by weathering as a soft minimum of the
+   planes' distances (`-s log sum exp(-r/s)`): sharp for blocks (1 % of the size), worn for boulders (12 %), which
+   follow a few large facets (seven planes, 92 %) with little noise. Each stone's length, width and height stray from
+   the preset's by up to `irregularity` (a block's 35 %).
 2. **Chips:** small planes knock the farthest corners off: fresh stone, its own submesh (`fresh` material slot).
 3. **Weathering:** lumps (fractal noise), crests and gullies (ridged noise), cracks on the borders of cellular noise's
    cells; fresh chips keep a third of it.
-4. **Bedding:** grooves where beds meet and each bed weathered back by its own share, so bedded limestone shows its
-   steps (the Lauterbrunnen walls are Malm limestone).
+4. **Bedding:** subtle: shallow grooves where beds meet and each bed weathered back by its own share, the beds'
+   boundaries wandering (`waviness`, uneven beds) so they read as faint lines, not even plates (the Lauterbrunnen
+   walls are Malm limestone).
 5. **On the ground:** scaled to its proportions, sunk by its burial (a share of its height) and cut flat 5 % of its
    size below the ground. A **pile** lays further, smaller stones round the first (the golden angle), a second course
-   on top; each stone is its own closed surface.
+   on top; a **patch** spreads stones flat over a disc (a sunflower spiral), their sizes by a power law; each stone
+   is its own closed surface.
 
 | Preset | What | Size |
 |---|---|---|
-| `BLOCK` | a limestone block fallen from a cliff: bedding and joints, chipped corners, grooved beds | 1 m |
-| `SLAB` | a flat slab split along its beds | 1.4 m |
+| `BLOCK` | a limestone block fallen from a cliff: angular, sharp fracture faces, chipped corners, faint uneven beds | 1 m |
+| `SLAB` | a slab split along a bed, its edges broken across | 1.3 m |
 | `SCREE` | a small sharp stone | 0.25 m |
-| `BOULDER` | rounded by water and weather, no chips | 1.2 m |
-| `ERRATIC` | a big rounded boulder the ice left | 2.6 m |
+| `BOULDER` | a few large facets worn round, no chips | 1.2 m |
+| `ERRATIC` | a big boulder the ice left, large rounded facets | 2.6 m |
 | `CLUSTER` | a clearance pile of seven stones | 0.45 m each |
+| `SCREE_PATCH` | 64 stones of 3 to 25 cm over a disc 1.1 m across, by a power law: talus scree as one model | 0.12 m the largest |
 
 Four levels (20 · 4^n triangles per stone: 20,480 to 320 for a block), each closed and wound outward, its error the
 largest gap between its edges and the surface, never less than the finer level's; through the asset manager a rock's
@@ -619,11 +625,12 @@ Map<Integer, AssetRef<ModelData>> models = RockAssets.models(procedural, here, "
   high sheds rocks as far as the line from its top falls to the **shadow angle**, 27.5 degrees (Evans and Hungr
   1993). A sample's place in the deposit, `t`, is 0 at the foot and 1 at the run-out's end, by the tangent of the line
   to the top.
-- **Size sorting** (fall sorting: big blocks roll further; Kirkby and Statham 1975, Statham 1976): a rock's mean size
-  is its kind's smallest plus `t^sorting` of the way to its largest, each rock spread about it log-normally. On the
-  test's wall the talus' mean size grows from 0.56 m below the cliff to 1.7 m at its toe, the run-out's blocks 2 to
-  3 m.
-- **Placement** as the plants': a jittered candidate per world cell of each kind (talus 2 m, rockfall 6, streams
+- **Sizes by a power law, sorted downslope:** rockfall debris follows a power law, the number of blocks larger than
+  a size falling as the size to the minus `fractal` (2.2; about 2 to 3: Ruiz-Carulla et al. 2015, Hantz et al.
+  2016): many small, few large. Its smallest size grows downslope (fall sorting: big blocks roll further; Kirkby and
+  Statham 1975, Statham 1976), from the kind's smallest plus `t^sorting` of the way to 40 % of its largest (tested:
+  near the foot each doubling of size has fewer rocks; the mean grows band by band downslope; the run-out's bigger).
+- **Placement** as the plants': a jittered candidate per world cell of each kind (talus 1.5 m, rockfall 6, streams
   3, piles 30, erratics 40), kept by its kind's density there, then Matern's type II thinning (a rock falls when a
   bigger one lies within their reaches added, times the packing 0.85). Every rock depends only on candidates within a
   halo, so tiles stream in any order and match at their seams (tested).
@@ -635,7 +642,7 @@ Map<Integer, AssetRef<ModelData>> models = RockAssets.models(procedural, here, "
 - **Models:** rocks share a field's `variants()` (a preset, one of 4 seeds, one of 4 headings, 3 moss and 3 lichen
   levels, 2 depths), each generated once (`RockAssets.recipe(variant, ...)` is its recipe, byte-identical to the
   direct API); an instance's rotation includes its variant's heading, so the moss faces north where it lies. Over 1 km2
-  round the Lauterbrunnen talus 11,262 rocks used 336 variants.
+  round the Lauterbrunnen talus 20,545 rocks used 348 variants.
 - **Plants keep off** (`Ecology.avoiding(Obstacles)`, the ecology's generic hook): a plant candidate whose stem with
   30 % of its crown radius lies on a rock's contact ellipse is taken out before thinning, so its neighbours may stand.
 - **Active talus:** the upper 40 % of a deposit on talus ground (`activeTalus`), where rocks still fall and the scree
@@ -644,22 +651,59 @@ Map<Integer, AssetRef<ModelData>> models = RockAssets.models(procedural, here, "
 - **Grass:** `RockTile.footprint` / `RockField.footprint` rasterize the contacts into a coverage map (1 under a rock,
   soft over a texel) for effects-vegetation's `GroundMap`; `RockTile.cover(x, z, soft)` per point.
 
+### The scree between the blocks: a carpet of debris
+
+A talus is a continuous carpet of angular debris, not blocks on smooth ground. Three layers make it:
+
+- **Fines in the terrain** (`TalusModifier`, `common-procedural-ecology-terrain`, an effects-terrain 0.5
+  `TerrainModifier`): `materials()` lays gravel (`GRAVEL`) into the terrain's material over the talus, `height()` adds
+  8 cm of roughness at a 40 cm grain (fading where the terrain is sampled coarser). Its cover is the field's
+  `talus(x, z)`: deposit below a cliff tall enough, within its run-out, on ground from a little under the talus slope
+  to a little over the angle of repose, worked out in cached 128 m blocks.
+- **Small stones, scattered cheaply** (`RockScatter`): 2 to 14 cm stones, 24 per square metre where the talus is full,
+  by a power law (exponent 2), each along the ground's slope with no thinning or search for rest; in 1.1 m world
+  cells, each with its stones (near the camera, single instances of eight `SCREE` variants) and its **patch** (farther
+  away, one instance of a `SCREE_PATCH` model whose coarse levels serve far away). The same stones whatever region is
+  asked (tested: the density by the cover within 10 %, more small than large, none off the talus).
+- **The blocks** of the field above, now denser (a candidate every 1.5 m) and by the power law.
+
+```java
+TerrainSurface bare = new TerrainSurface(site, parameters);
+RockField rocks = new RockField(new Ecology(TerrainEcology.of(bare, 2), ...), RockFieldParameters.DEFAULTS);
+TerrainSurface surface = bare.withModifiers(bare.modifiers().with(
+    new TalusModifier(rocks, TalusModifier.Parameters.DEFAULTS, bounds)));        // the tiles draw the gravel
+RockScatter scatter = new RockScatter(rocks, RockScatter.Parameters.DEFAULTS, TerrainEcology.of(surface, 2));
+RockScatter.Tile scree = scatter.region(x0, z0, 256, 256);  // per cell: stones first(c)..end(c), or patch c
+```
+
+### No trees on rock faces
+
+The ecology keeps trees and shrubs off near-vertical ground (`EcologyParameters.Woody`): they thin over the 8 degrees
+below `maxSlope` (48) and need `minSoil` (25 cm; shrubs half) of soil, whose depth (`Site.soilDepth`) is estimated
+from the ground's soil share thinning with the slope (about a metre on gentle soil, nothing on the steepest). Engine
+settings `procedural.ecology.treeMaxSlope` and `procedural.ecology.treeMinSoil` (`EcologySettings.apply`). Tested on
+a wall whose terrain calls all its ground soil: woody plants on its face without the limit, none with it.
+
 **Settings** (`RockSettings`, engine settings, defaults `RockFieldParameters.DEFAULTS`): `procedural.rocks.cell`,
-`cliffSlope`, `cliffHeight`, `search`, `shadowAngle`, `talusSlope`, `reposeSlope`, `activeTalus`, `sorting`, `spread`, `tilt`,
+`cliffSlope`, `cliffHeight`, `search`, `shadowAngle`, `talusSlope`, `reposeSlope`, `activeTalus`, `sorting`, `spread`,
+`fractal`, `tilt`,
 `packing`, `plantClearance`, `seeds`, `headings`, `coverLevels`, `depths`, and per kind (`talus`, `rockfall`,
 `stream`, `clearance`, `erratic`) `.density`, `.minSize`, `.maxSize`, `.cell`.
 
-**Cost:** over Lauterbrunnen's valley round the church (2 by 2 km, effects-terrain's surface), 35,174 rocks (32,018
-talus, 360 rockfall, 2,480 stream boulders, 160 piles, 156 erratics) in 14.7 s on 32 threads, the terrain analysis
-included (shared with the ecology); a variant's coarse model for its footprint is made once per field.
+**Cost:** over Lauterbrunnen's valley round the church (2 by 2 km, effects-terrain's surface), 65,070 rocks (62,090
+talus, 357 rockfall, 2,308 stream boulders, 158 piles, 157 erratics) in 14.3 s on 32 threads, the terrain analysis
+included (shared with the ecology); a variant's coarse model for its footprint is made once per field. In the film's
+1 km2 round the talus cone: 20,545 blocks of 348 variants, 150,075 scree stones within 70 m of the cone and 66,642
+patches beyond.
 
 **Pictures and film:** `RockPictures` (CPU, every preset bare and grown, `TRUESIM_PICTURES=true`), `RockMaps` (the
 test's wall), `LauterbrunnenRocks` (a map of the valley's rocks by kind), `RockFilm` in `preview` (`TRUESIM_FILMS=true`:
 the talus cone at the foot of Lauterbrunnen's western wall on effects-terrain's terrain, framed on the cone the
 field finds there, its upper part bare and the forest below; then every preset close, bare, mossy and lichened, in
-textured limestone; `TRUESIM_ROCK_STILLS=true` renders a frame per shot). What does not look real yet: the cliff is
-smooth (no rock texture or overhangs on the terrain), the scree between the instanced stones is the ground's colour,
-and the ecology puts a few pines on the wall's face.
+textured limestone; the talus' gravel through the `TalusModifier`, single scree stones within 70 m of the cone and
+patches beyond; `TRUESIM_ROCK_STILLS=true` renders a frame per shot). What does not look real yet: the cliff face is
+the terrain's smooth surface (a rock material and detail for steep faces belong to effects-terrain's terrain
+material).
 
 ## Fences
 
