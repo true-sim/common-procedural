@@ -145,12 +145,15 @@ final class WaterMeshes {
         return w.build();
     }
 
+    /** The steepest a sheet leans out from the face, metres out per metre fallen (about 8.5 degrees). */
+    static final double LEAN = 0.15;
+
     /**
      * {@code path} with its steps out from the face smoothed: where the path is held off the cliff it jumps outward
-     * at ledges, which a sheet drawn through it shows as hard horizontal ledges. Each sample's distance out along the
-     * fall's direction becomes the larger of its own and the mean of its neighbours' (a window of a twentieth of the
-     * samples, at least three each side), twice: the jumps become ramps, and no sample comes closer to the rock than
-     * the path held it.
+     * at ledges, which a sheet drawn through it showed as hard horizontal ledges. Each sample's distance out along
+     * the fall's direction becomes the largest of every sample's less {@link #LEAN} times the fall between them: the
+     * sheet leans out ahead of a ledge by at most that, never comes closer to the rock than the path held it, and
+     * falls as near straight down as the face allows.
      */
     static Waterfall.Path smooth(Waterfall.Path path, double dx, double dz) {
         int n = path.count();
@@ -159,27 +162,21 @@ final class WaterMeshes {
         }
         double x0 = path.x()[0];
         double z0 = path.z()[0];
-        double[] out = new double[n];
+        double[] held = new double[n];
         double[] side = new double[n];
         for (int k = 0; k < n; k++) {
             double ex = path.x()[k] - x0;
             double ez = path.z()[k] - z0;
-            out[k] = ex * dx + ez * dz;
+            held[k] = ex * dx + ez * dz;
             side[k] = -ex * dz + ez * dx;
         }
-        int half = Math.max(3, n / 20);
-        for (int round = 0; round < 2; round++) {
-            double[] next = out.clone();
-            for (int k = 1; k < n; k++) {
-                double sum = 0;
-                int count = 0;
-                for (int j = Math.max(0, k - half); j <= Math.min(n - 1, k + half); j++) {
-                    sum += out[j];
-                    count++;
-                }
-                next[k] = Math.max(out[k], sum / count);
+        double[] out = new double[n];
+        for (int k = 0; k < n; k++) {
+            double best = held[k];
+            for (int j = 0; j < n; j++) {
+                best = Math.max(best, held[j] - LEAN * Math.abs(path.y()[k] - path.y()[j]));
             }
-            out = next;
+            out[k] = best;
         }
         double[] x = new double[n];
         double[] z = new double[n];
