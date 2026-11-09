@@ -1,6 +1,10 @@
 package com.truesim.common.procedural.settlement;
 
+import com.truesim.common.math.geometry.Polygons;
+
 import com.truesim.common.math.Maths;
+import com.truesim.common.procedural.building.BuildingSpec;
+import com.truesim.common.procedural.building.Footprint;
 import java.util.List;
 
 /**
@@ -46,7 +50,7 @@ public final class Settlement {
         public double length() {
             double l = 0;
             for (int i = 1; i < x.length; i++) {
-                l += Geometry.length(x[i] - x[i - 1], z[i] - z[i - 1]);
+                l += Polygons.length(x[i] - x[i - 1], z[i] - z[i - 1]);
             }
             return l;
         }
@@ -55,7 +59,7 @@ public final class Settlement {
         public double distance(double px, double pz) {
             double best = Double.MAX_VALUE;
             for (int i = 1; i < x.length; i++) {
-                best = Math.min(best, Geometry.segmentDistance(px, pz, x[i - 1], z[i - 1], x[i], z[i]));
+                best = Math.min(best, Polygons.segmentDistance(px, pz, x[i - 1], z[i - 1], x[i], z[i]));
             }
             return best;
         }
@@ -64,7 +68,7 @@ public final class Settlement {
         public double maxGrade() {
             double g = 0;
             for (int i = 1; i < x.length; i++) {
-                double run = Geometry.length(x[i] - x[i - 1], z[i] - z[i - 1]);
+                double run = Polygons.length(x[i] - x[i - 1], z[i] - z[i - 1]);
                 if (run > 1e-9) {
                     g = Math.max(g, Math.abs(y[i] - y[i - 1]) / run);
                 }
@@ -157,48 +161,58 @@ public final class Settlement {
 
         /** Its area, square metres. */
         public double area() {
-            return Math.abs(Geometry.area(x, z));
+            return Math.abs(Polygons.signedArea(x, z));
         }
 
         /** Whether ({@code px}, {@code pz}) is inside. */
         public boolean contains(double px, double pz) {
-            return Geometry.inside(px, pz, x, z);
+            return Polygons.insideConvex(px, pz, x, z);
         }
     }
 
     /**
-     * A building placed: its spec for the generator, where it stands and how it is turned.
+     * A building placed: the buildings generator's spec (common-procedural's {@code building} package: its kind,
+     * {@link Footprint} with its place and turn, floors, roof and seed) and where its ground floor stands.
      *
      * @param id its index in {@link #buildings()}
-     * @param spec what to build
-     * @param x its footprint's centre, east
+     * @param spec what to build, where: {@code Buildings.generate(spec, ground)} builds it
      * @param y its ground floor's height: the highest ground under the footprint
-     * @param z its footprint's centre, south
-     * @param yaw its turn: its front faces {@code (sin yaw, cos yaw)}
      * @param foundation the lowest ground under the footprint (how far down its foundation must reach)
      * @param plot its plot, or {@link #NONE} (a hay barn on the meadows)
      * @param road the road that reaches it (its plot's, or a barn's footpath)
      */
-    public record Building(int id, BuildingSpec spec, double x, double y, double z, double yaw, double foundation,
-        int plot, int road) {
+    public record Building(int id, BuildingSpec spec, double y, double foundation, int plot, int road) {
+
+        /** Its footprint's centre, east. */
+        public double x() {
+            return spec.footprint().x();
+        }
+
+        /** Its footprint's centre, south. */
+        public double z() {
+            return spec.footprint().z();
+        }
+
+        /** Its turn: its front (gable) faces {@code (sin yaw, cos yaw)}. */
+        public double yaw() {
+            return spec.footprint().yaw();
+        }
 
         /** The ground plan point of ({@code lx}, {@code lz}) in its frame into {@code out} (x, z). */
         public void toWorld(double lx, double lz, double[] out) {
-            double c = Maths.cos(yaw);
-            double s = Maths.sin(yaw);
-            out[0] = x + lx * c + lz * s;
-            out[1] = z - lx * s + lz * c;
+            out[0] = spec.footprint().worldX(lx, lz);
+            out[1] = spec.footprint().worldZ(lx, lz);
         }
 
-        /** The front door's ground plan point (the front's middle) into {@code out}. */
+        /** The front door's ground plan point (the front gable's middle) into {@code out}. */
         public void door(double[] out) {
-            toWorld(0, spec.depth() / 2, out);
+            toWorld(0, spec.footprint().depth() / 2, out);
         }
 
         /** The footprint's corners, x then z of each. */
         public double[] corners() {
-            double hw = spec.width() / 2;
-            double hd = spec.depth() / 2;
+            double hw = spec.footprint().width() / 2;
+            double hd = spec.footprint().depth() / 2;
             double[] out = new double[8];
             double[] p = new double[2];
             double[][] at = {{-hw, -hd}, {hw, -hd}, {hw, hd}, {-hw, hd}};
@@ -212,13 +226,14 @@ public final class Settlement {
 
         /** Whether ({@code px}, {@code pz}) is within its footprint, grown by {@code margin} metres. */
         public boolean contains(double px, double pz, double margin) {
-            double c = Maths.cos(yaw);
-            double s = Maths.sin(yaw);
-            double dx = px - x;
-            double dz = pz - z;
+            double c = Maths.cos(yaw());
+            double s = Maths.sin(yaw());
+            double dx = px - x();
+            double dz = pz - z();
             double lx = dx * c - dz * s;
             double lz = dx * s + dz * c;
-            return Math.abs(lx) <= spec.width() / 2 + margin && Math.abs(lz) <= spec.depth() / 2 + margin;
+            return Math.abs(lx) <= spec.footprint().width() / 2 + margin
+                && Math.abs(lz) <= spec.footprint().depth() / 2 + margin;
         }
     }
 
@@ -279,7 +294,7 @@ public final class Settlement {
         public double length() {
             double l = 0;
             for (int i = 1; i < x.length; i++) {
-                l += Geometry.length(x[i] - x[i - 1], z[i] - z[i - 1]);
+                l += Polygons.length(x[i] - x[i - 1], z[i] - z[i - 1]);
             }
             return l;
         }

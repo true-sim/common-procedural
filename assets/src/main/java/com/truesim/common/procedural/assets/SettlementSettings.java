@@ -85,6 +85,10 @@ public final class SettlementSettings {
         Setting.decimal("procedural.settlement.main.reach", 460.0f, 20.0f, 4000.0f,
             "how far from the square the main road lead, metres");
 
+    public static final Setting<Float> MAIN_FILLET =
+        Setting.decimal("procedural.settlement.main.fillet", 4.0f, 0.0f, 50.0f,
+            "the radius of the rounded corners where the main road join others, metres");
+
     public static final Setting<Float> LANE_WIDTH =
         Setting.decimal("procedural.settlement.lane.width", 4.0f, 0.5f, 20.0f,
             "the width of village lanes, metres");
@@ -104,6 +108,10 @@ public final class SettlementSettings {
     public static final Setting<Float> LANE_REACH =
         Setting.decimal("procedural.settlement.lane.reach", 200.0f, 20.0f, 4000.0f,
             "how far from the square village lanes lead, metres");
+
+    public static final Setting<Float> LANE_FILLET =
+        Setting.decimal("procedural.settlement.lane.fillet", 4.0f, 0.0f, 50.0f,
+            "the radius of the rounded corners where village lanes join others, metres");
 
     public static final Setting<Float> TRACK_WIDTH =
         Setting.decimal("procedural.settlement.track.width", 3.0f, 0.5f, 20.0f,
@@ -125,6 +133,10 @@ public final class SettlementSettings {
         Setting.decimal("procedural.settlement.track.reach", 430.0f, 20.0f, 4000.0f,
             "how far from the square farm tracks lead, metres");
 
+    public static final Setting<Float> TRACK_FILLET =
+        Setting.decimal("procedural.settlement.track.fillet", 6.0f, 0.0f, 50.0f,
+            "the radius of the rounded corners where farm tracks join others, metres");
+
     public static final Setting<Float> FOOTPATH_WIDTH =
         Setting.decimal("procedural.settlement.footpath.width", 1.4f, 0.5f, 20.0f,
             "the width of footpaths, metres");
@@ -144,6 +156,10 @@ public final class SettlementSettings {
     public static final Setting<Float> FOOTPATH_REACH =
         Setting.decimal("procedural.settlement.footpath.reach", 420.0f, 20.0f, 4000.0f,
             "how far from the square footpaths lead, metres");
+
+    public static final Setting<Float> FOOTPATH_FILLET =
+        Setting.decimal("procedural.settlement.footpath.fillet", 1.5f, 0.0f, 50.0f,
+            "the radius of the rounded corners where footpaths join others, metres");
 
     public static final Setting<Float> CORE_SQUARE_LENGTH =
         Setting.decimal("procedural.settlement.core.squareLength", 34.0f, 8.0f, 200.0f,
@@ -295,7 +311,11 @@ public final class SettlementSettings {
 
     public static final Setting<Float> SURFACE_TILE =
         Setting.decimal("procedural.settlement.surface.tile", 64.0f, 8.0f, 1024.0f,
-            "the road meshes' tile side, metres");
+            "the road meshes' tile side, metres (a whole number of cells)");
+
+    public static final Setting<Float> SURFACE_CELL =
+        Setting.decimal("procedural.settlement.surface.cell", 0.5f, 0.125f, 4.0f,
+            "the road surface's triangulation grid, metres");
 
     public static final Setting<Float> SURFACE_CAMBER =
         Setting.decimal("procedural.settlement.surface.camber", 0.025f, 0.0f, 0.2f,
@@ -321,30 +341,48 @@ public final class SettlementSettings {
         Setting.decimal("procedural.settlement.surface.batter", 1.5f, 0.1f, 10.0f,
             "the roads' cuts' and fills' run per metre of rise");
 
+    public static final Setting<Float> SURFACE_MIN_RUN =
+        Setting.decimal("procedural.settlement.surface.minRun", 2.0f, 0.0f, 50.0f,
+            "the shortest cut or fill beyond a road's shoulder, metres");
+
+    public static final Setting<Float> SURFACE_SHOULDER =
+        Setting.decimal("procedural.settlement.surface.shoulder", 0.6f, 0.0f, 10.0f,
+            "the level strip of terrain beside a road's edge, metres");
+
+    public static final Setting<Float> SURFACE_SINK =
+        Setting.decimal("procedural.settlement.surface.sink", 0.15f, 0.0f, 2.0f,
+            "how far the terrain lies under a road's surface, metres");
+
+    public static final Setting<Float> SURFACE_VERGE =
+        Setting.decimal("procedural.settlement.surface.verge", 1.5f, 0.0f, 20.0f,
+            "the width of the worn verge and gravel scatter beside a road, metres");
+
     public static final Setting<Float> SURFACE_TEXTURE =
         Setting.decimal("procedural.settlement.surface.texture", 2.0f, 0.1f, 50.0f,
             "the road surfaces' texture tile, metres");
 
     public static final Setting<Float> SURFACE_LIFT =
-        Setting.decimal("procedural.settlement.surface.lift", 0.03f, 0.0f, 0.5f,
-            "how far road surfaces lie above the graded terrain, metres");
+        Setting.decimal("procedural.settlement.surface.lift", 0.02f, 0.0f, 0.5f,
+            "how far a road's surface lies above the terrain inside its edge, metres");
 
     /** Every setting, to register. */
     public static final List<Setting<?>> ALL = List.of(
         GRID_EXTENT, GRID_CELL, GRID_RASTER, NETWORK_GRADE_WEIGHT, NETWORK_SIDE_WEIGHT, NETWORK_TURN_WEIGHT,
         NETWORK_MAX_TURN, NETWORK_REUSE, NETWORK_BRIDGE_WEIGHT, NETWORK_WET_WEIGHT, NETWORK_FLOOD_WEIGHT,
         NETWORK_HEADROOM, NETWORK_STEP, MAIN_WIDTH, MAIN_MAX_GRADE, MAIN_MAX_SIDE_SLOPE, MAIN_COUNT, MAIN_REACH,
-        LANE_WIDTH, LANE_MAX_GRADE, LANE_MAX_SIDE_SLOPE, LANE_COUNT, LANE_REACH, TRACK_WIDTH, TRACK_MAX_GRADE,
-        TRACK_MAX_SIDE_SLOPE, TRACK_COUNT, TRACK_REACH, FOOTPATH_WIDTH, FOOTPATH_MAX_GRADE, FOOTPATH_MAX_SIDE_SLOPE,
-        FOOTPATH_COUNT, FOOTPATH_REACH, CORE_SQUARE_LENGTH, CORE_SQUARE_WIDTH, CORE_CORE_RADIUS, CORE_VILLAGE_RADIUS,
-        PLOTS_CORE_FRONTAGE, PLOTS_CORE_DEPTH, PLOTS_FRONTAGE, PLOTS_DEPTH, PLOTS_VERGE, PLOTS_OUTER_DENSITY,
-        BUILDINGS_CORE_SETBACK, BUILDINGS_SETBACK, BUILDINGS_SIDE_GAP, BUILDINGS_HOUSE_MIN, BUILDINGS_HOUSE_MAX,
-        BUILDINGS_FARM_MIN, BUILDINGS_FARM_MAX, BUILDINGS_BARN_MIN, BUILDINGS_BARN_MAX, BUILDINGS_SUN_WEIGHT,
-        BUILDINGS_EAVES_TO_VALLEY, SITING_MAX_SLOPE, SITING_FLOOD_HEIGHT, SITING_FLOOD_PER_ROOT, SITING_WETLAND,
-        SITING_WATER, BARNS_SPACING, BARNS_DENSITY, BARNS_MAX_SLOPE, BARNS_MEADOW, BARNS_CLEARANCE,
-        FURNITURE_LAMP_SPACING, FURNITURE_LAMP_OFFSET, FURNITURE_FENCE_OFFSET, FURNITURE_MIN_FENCE, FURNITURE_ROCKS,
-        FURNITURE_TREE_MARGIN, SURFACE_TILE, SURFACE_CAMBER, SURFACE_KERB_WIDTH, SURFACE_KERB_HEIGHT,
-        SURFACE_STEP_GRADE, SURFACE_STEP_RISE, SURFACE_BATTER, SURFACE_TEXTURE, SURFACE_LIFT);
+        MAIN_FILLET, LANE_WIDTH, LANE_MAX_GRADE, LANE_MAX_SIDE_SLOPE, LANE_COUNT, LANE_REACH, LANE_FILLET,
+        TRACK_WIDTH, TRACK_MAX_GRADE, TRACK_MAX_SIDE_SLOPE, TRACK_COUNT, TRACK_REACH, TRACK_FILLET, FOOTPATH_WIDTH,
+        FOOTPATH_MAX_GRADE, FOOTPATH_MAX_SIDE_SLOPE, FOOTPATH_COUNT, FOOTPATH_REACH, FOOTPATH_FILLET,
+        CORE_SQUARE_LENGTH, CORE_SQUARE_WIDTH, CORE_CORE_RADIUS, CORE_VILLAGE_RADIUS, PLOTS_CORE_FRONTAGE,
+        PLOTS_CORE_DEPTH, PLOTS_FRONTAGE, PLOTS_DEPTH, PLOTS_VERGE, PLOTS_OUTER_DENSITY, BUILDINGS_CORE_SETBACK,
+        BUILDINGS_SETBACK, BUILDINGS_SIDE_GAP, BUILDINGS_HOUSE_MIN, BUILDINGS_HOUSE_MAX, BUILDINGS_FARM_MIN,
+        BUILDINGS_FARM_MAX, BUILDINGS_BARN_MIN, BUILDINGS_BARN_MAX, BUILDINGS_SUN_WEIGHT, BUILDINGS_EAVES_TO_VALLEY,
+        SITING_MAX_SLOPE, SITING_FLOOD_HEIGHT, SITING_FLOOD_PER_ROOT, SITING_WETLAND, SITING_WATER, BARNS_SPACING,
+        BARNS_DENSITY, BARNS_MAX_SLOPE, BARNS_MEADOW, BARNS_CLEARANCE, FURNITURE_LAMP_SPACING, FURNITURE_LAMP_OFFSET,
+        FURNITURE_FENCE_OFFSET, FURNITURE_MIN_FENCE, FURNITURE_ROCKS, FURNITURE_TREE_MARGIN, SURFACE_TILE,
+        SURFACE_CELL, SURFACE_CAMBER, SURFACE_KERB_WIDTH, SURFACE_KERB_HEIGHT, SURFACE_STEP_GRADE, SURFACE_STEP_RISE,
+        SURFACE_BATTER, SURFACE_MIN_RUN, SURFACE_SHOULDER, SURFACE_SINK, SURFACE_VERGE, SURFACE_TEXTURE,
+        SURFACE_LIFT);
 
     private SettlementSettings() {
     }
@@ -358,13 +396,17 @@ public final class SettlementSettings {
                 d(settings, NETWORK_BRIDGE_WEIGHT), d(settings, NETWORK_WET_WEIGHT),
                 d(settings, NETWORK_FLOOD_WEIGHT), d(settings, NETWORK_HEADROOM), d(settings, NETWORK_STEP)),
             new SettlementParameters.RoadClass(d(settings, MAIN_WIDTH), d(settings, MAIN_MAX_GRADE),
-                d(settings, MAIN_MAX_SIDE_SLOPE), settings.get(MAIN_COUNT), d(settings, MAIN_REACH)),
+                d(settings, MAIN_MAX_SIDE_SLOPE), settings.get(MAIN_COUNT), d(settings, MAIN_REACH),
+                d(settings, MAIN_FILLET)),
             new SettlementParameters.RoadClass(d(settings, LANE_WIDTH), d(settings, LANE_MAX_GRADE),
-                d(settings, LANE_MAX_SIDE_SLOPE), settings.get(LANE_COUNT), d(settings, LANE_REACH)),
+                d(settings, LANE_MAX_SIDE_SLOPE), settings.get(LANE_COUNT), d(settings, LANE_REACH),
+                d(settings, LANE_FILLET)),
             new SettlementParameters.RoadClass(d(settings, TRACK_WIDTH), d(settings, TRACK_MAX_GRADE),
-                d(settings, TRACK_MAX_SIDE_SLOPE), settings.get(TRACK_COUNT), d(settings, TRACK_REACH)),
+                d(settings, TRACK_MAX_SIDE_SLOPE), settings.get(TRACK_COUNT), d(settings, TRACK_REACH),
+                d(settings, TRACK_FILLET)),
             new SettlementParameters.RoadClass(d(settings, FOOTPATH_WIDTH), d(settings, FOOTPATH_MAX_GRADE),
-                d(settings, FOOTPATH_MAX_SIDE_SLOPE), settings.get(FOOTPATH_COUNT), d(settings, FOOTPATH_REACH)),
+                d(settings, FOOTPATH_MAX_SIDE_SLOPE), settings.get(FOOTPATH_COUNT), d(settings, FOOTPATH_REACH),
+                d(settings, FOOTPATH_FILLET)),
             new SettlementParameters.Core(d(settings, CORE_SQUARE_LENGTH), d(settings, CORE_SQUARE_WIDTH),
                 d(settings, CORE_CORE_RADIUS), d(settings, CORE_VILLAGE_RADIUS)),
             new SettlementParameters.Plots(d(settings, PLOTS_CORE_FRONTAGE), d(settings, PLOTS_CORE_DEPTH),
@@ -382,10 +424,11 @@ public final class SettlementSettings {
             new SettlementParameters.Furniture(d(settings, FURNITURE_LAMP_SPACING),
                 d(settings, FURNITURE_LAMP_OFFSET), d(settings, FURNITURE_FENCE_OFFSET),
                 d(settings, FURNITURE_MIN_FENCE), settings.get(FURNITURE_ROCKS), d(settings, FURNITURE_TREE_MARGIN)),
-            new SettlementParameters.Surface(d(settings, SURFACE_TILE), d(settings, SURFACE_CAMBER),
-                d(settings, SURFACE_KERB_WIDTH), d(settings, SURFACE_KERB_HEIGHT), d(settings, SURFACE_STEP_GRADE),
-                d(settings, SURFACE_STEP_RISE), d(settings, SURFACE_BATTER), d(settings, SURFACE_TEXTURE),
-                d(settings, SURFACE_LIFT)));
+            new SettlementParameters.Surface(d(settings, SURFACE_TILE), d(settings, SURFACE_CELL),
+                d(settings, SURFACE_CAMBER), d(settings, SURFACE_KERB_WIDTH), d(settings, SURFACE_KERB_HEIGHT),
+                d(settings, SURFACE_STEP_GRADE), d(settings, SURFACE_STEP_RISE), d(settings, SURFACE_BATTER),
+                d(settings, SURFACE_MIN_RUN), d(settings, SURFACE_SHOULDER), d(settings, SURFACE_SINK),
+                d(settings, SURFACE_VERGE), d(settings, SURFACE_TEXTURE), d(settings, SURFACE_LIFT)));
     }
 
     /** A decimal setting as the double it was written as (0.1f reads 0.1, not 0.10000000149). */

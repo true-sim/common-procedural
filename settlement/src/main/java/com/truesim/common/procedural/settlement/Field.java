@@ -48,7 +48,7 @@ final class Field {
         wetland = new float[n * n];
         meadow = new float[n * n];
         flood = new boolean[n * n];
-        IntStream.range(0, n).forEach(j -> {
+        IntStream.range(0, n).parallel().forEach(j -> {
             Site site = new Site();
             for (int i = 0; i < n; i++) {
                 int a = j * n + i;

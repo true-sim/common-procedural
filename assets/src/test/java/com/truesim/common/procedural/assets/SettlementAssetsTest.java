@@ -133,7 +133,7 @@ class SettlementAssetsTest {
         assertThat(p.lane().count()).isEqualTo(3);
         assertThat(p.main().maxGrade()).isEqualTo(0.08);
         assertThat(p.buildings().eavesToValley()).isFalse();
-        assertThat(SettlementSettings.ALL).hasSize(79).doesNotHaveDuplicates();
+        assertThat(SettlementSettings.ALL).hasSize(88).doesNotHaveDuplicates();
     }
 
     @Test

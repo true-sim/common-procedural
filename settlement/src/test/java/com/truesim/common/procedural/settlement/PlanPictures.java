@@ -99,7 +99,8 @@ class PlanPictures {
             g.setColor(switch (b.spec().kind()) {
                 case CHURCH -> new Color(240, 240, 240);
                 case INN -> new Color(220, 90, 60);
-                case HOUSE -> new Color(160, 70, 50);
+                case CHALET -> new Color(160, 70, 50);
+                case WOODSHED -> new Color(90, 60, 35);
                 case FARMHOUSE -> new Color(130, 90, 60);
                 case HAY_BARN -> new Color(100, 70, 40);
             });

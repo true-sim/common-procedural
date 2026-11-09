@@ -1,7 +1,13 @@
 package com.truesim.common.procedural.settlement;
 
+import com.truesim.common.math.geometry.Polygons;
+import com.truesim.common.math.curve.Polyline2;
+
 import com.truesim.common.math.Maths;
 import com.truesim.common.procedural.Seeds;
+import com.truesim.common.procedural.building.BuildingKind;
+import com.truesim.common.procedural.building.BuildingSpec;
+import com.truesim.common.procedural.building.Footprint;
 import com.truesim.common.procedural.ecology.Ecology;
 import com.truesim.common.procedural.settlement.Settlement.Building;
 import com.truesim.common.procedural.settlement.Settlement.Plot;
@@ -44,7 +50,7 @@ final class Planner {
     private final boolean[] onRoad;
     private final boolean[] blocked;
     private final List<Road> roads = new ArrayList<>();
-    private final List<Line> lines = new ArrayList<>();
+    private final List<Polyline2> lines = new ArrayList<>();
     /** Roads that lead to a barn (no signpost). */
     private final List<Integer> barnPaths = new ArrayList<>();
     private final List<Plot> plots = new ArrayList<>();
@@ -136,19 +142,19 @@ final class Planner {
             }
             System.arraycopy(toB, 1, cells, toA.length, toB.length - 1);
         }
-        Line raw = Line.chaikin(points(cells, 0, cells.length - 1), 3);
+        Polyline2 raw = Polyline2.chaikin(points(cells, 0, cells.length - 1), 3);
         square = square(raw);
         markSquare();
-        for (Line piece : clip(raw)) {
-            boolean startOnSquare = square.outside(piece.x[0], piece.z[0]) < 0.01;
-            boolean endOnSquare = square.outside(piece.x[piece.count() - 1], piece.z[piece.count() - 1]) < 0.01;
+        for (Polyline2 piece : clip(raw)) {
+            boolean startOnSquare = square.outside(piece.x[0], piece.y[0]) < 0.01;
+            boolean endOnSquare = square.outside(piece.x[piece.count() - 1], piece.y[piece.count() - 1]) < 0.01;
             road(RoadKind.MAIN, piece, startOnSquare ? Settlement.SQUARE : Settlement.NONE,
                 endOnSquare ? Settlement.SQUARE : Settlement.NONE, false);
         }
     }
 
     /** The square on the main road at the origin: along the road there, a plane fitted to the ground. */
-    private Square square(Line road) {
+    private Square square(Polyline2 road) {
         double[] q = new double[3];
         double at = road.nearest(ox, oz, q);
         double[] a = new double[4];
@@ -202,13 +208,13 @@ final class Planner {
     }
 
     /** The parts of {@code line} outside the square, each ending on its edge where it meets it. */
-    private List<Line> clip(Line line) {
-        List<Line> pieces = new ArrayList<>();
+    private List<Polyline2> clip(Polyline2 line) {
+        List<Polyline2> pieces = new ArrayList<>();
         List<double[]> current = new ArrayList<>();
         for (int i = 0; i < line.count(); i++) {
-            boolean out = square.outside(line.x[i], line.z[i]) > 0;
+            boolean out = square.outside(line.x[i], line.y[i]) > 0;
             if (i > 0) {
-                boolean wasOut = square.outside(line.x[i - 1], line.z[i - 1]) > 0;
+                boolean wasOut = square.outside(line.x[i - 1], line.y[i - 1]) > 0;
                 if (out != wasOut) {
                     // the crossing, by bisection on the box distance
                     double lo = 0;
@@ -216,7 +222,7 @@ final class Planner {
                     for (int it = 0; it < 40; it++) {
                         double m = (lo + hi) / 2;
                         double mx = line.x[i - 1] + m * (line.x[i] - line.x[i - 1]);
-                        double mz = line.z[i - 1] + m * (line.z[i] - line.z[i - 1]);
+                        double mz = line.y[i - 1] + m * (line.y[i] - line.y[i - 1]);
                         if ((square.outside(mx, mz) > 0) == wasOut) {
                             lo = m;
                         } else {
@@ -225,7 +231,7 @@ final class Planner {
                     }
                     double t = wasOut ? hi : lo;
                     double[] crossing = {line.x[i - 1] + t * (line.x[i] - line.x[i - 1]),
-                        line.z[i - 1] + t * (line.z[i] - line.z[i - 1])};
+                        line.y[i - 1] + t * (line.y[i] - line.y[i - 1])};
                     // onto the edge exactly
                     double along = Math.clamp(square.along(crossing[0], crossing[1]), -square.halfLength(),
                         square.halfLength());
@@ -246,7 +252,7 @@ final class Planner {
                 }
             }
             if (out) {
-                current.add(new double[] {line.x[i], line.z[i]});
+                current.add(new double[] {line.x[i], line.y[i]});
             }
         }
         if (current.size() > 1) {
@@ -256,25 +262,25 @@ final class Planner {
         return pieces;
     }
 
-    private static Line toLine(List<double[]> points) {
+    private static Polyline2 toLine(List<double[]> points) {
         double[] x = new double[points.size()];
         double[] z = new double[points.size()];
         for (int k = 0; k < x.length; k++) {
             x[k] = points.get(k)[0];
             z[k] = points.get(k)[1];
         }
-        return new Line(x, z);
+        return new Polyline2(x, z);
     }
 
     /** The nodes {@code from} to {@code to} of {@code cells} as a line. */
-    private Line points(int[] cells, int from, int to) {
+    private Polyline2 points(int[] cells, int from, int to) {
         double[] x = new double[to - from + 1];
         double[] z = new double[to - from + 1];
         for (int k = from; k <= to; k++) {
             x[k - from] = field.x(cells[k] % field.n);
             z[k - from] = field.z(cells[k] / field.n);
         }
-        return new Line(x, z);
+        return new Polyline2(x, z);
     }
 
     /**
@@ -373,14 +379,14 @@ final class Planner {
             while (end < cells.length - 1 && !onRoad[cells[end]]) {
                 end++;
             }
-            Line line = points(cells, start, end);
+            Polyline2 line = points(cells, start, end);
             boolean last = end == cells.length - 1;
             if (last && !Double.isNaN(endX)) {
                 double[] x = Arrays.copyOf(line.x, line.count() + 1);
-                double[] z = Arrays.copyOf(line.z, line.count() + 1);
+                double[] z = Arrays.copyOf(line.y, line.count() + 1);
                 x[x.length - 1] = endX;
                 z[z.length - 1] = endZ;
-                line = new Line(x, z);
+                line = new Polyline2(x, z);
             }
             added.addAll(run(kind, line, onRoad[cells[start]], onRoad[cells[end]] && !(last && !onRoad[target])));
             start = end;
@@ -405,9 +411,9 @@ final class Planner {
     }
 
     /** A run of a route as roads: its ends snapped onto the network where they join it. */
-    private List<Integer> run(RoadKind kind, Line line, boolean joinsAtStart, boolean joinsAtEnd) {
+    private List<Integer> run(RoadKind kind, Polyline2 line, boolean joinsAtStart, boolean joinsAtEnd) {
         double[] x = line.x.clone();
-        double[] z = line.z.clone();
+        double[] z = line.y.clone();
         int from = Settlement.NONE;
         int to = Settlement.NONE;
         double[] q = new double[3];
@@ -421,26 +427,26 @@ final class Planner {
             x[x.length - 1] = q[0];
             z[z.length - 1] = q[1];
         }
-        Line smooth = Line.chaikin(new Line(x, z), 3);
+        Polyline2 smooth = Polyline2.chaikin(new Polyline2(x, z), 3);
         // a run may cross the square's corner: keep it outside
-        List<Line> pieces = from == Settlement.SQUARE || to == Settlement.SQUARE || touchesSquare(smooth)
+        List<Polyline2> pieces = from == Settlement.SQUARE || to == Settlement.SQUARE || touchesSquare(smooth)
             ? clip(smooth) : List.of(smooth);
         List<Integer> ids = new ArrayList<>();
-        for (Line piece : pieces) {
-            int f = square.outside(piece.x[0], piece.z[0]) < 0.01 ? Settlement.SQUARE
-                : piece.x[0] == smooth.x[0] && piece.z[0] == smooth.z[0] ? from : Settlement.NONE;
+        for (Polyline2 piece : pieces) {
+            int f = square.outside(piece.x[0], piece.y[0]) < 0.01 ? Settlement.SQUARE
+                : piece.x[0] == smooth.x[0] && piece.y[0] == smooth.y[0] ? from : Settlement.NONE;
             int last = piece.count() - 1;
-            int t = square.outside(piece.x[last], piece.z[last]) < 0.01 ? Settlement.SQUARE
-                : piece.x[last] == smooth.x[smooth.count() - 1] && piece.z[last] == smooth.z[smooth.count() - 1] ? to
+            int t = square.outside(piece.x[last], piece.y[last]) < 0.01 ? Settlement.SQUARE
+                : piece.x[last] == smooth.x[smooth.count() - 1] && piece.y[last] == smooth.y[smooth.count() - 1] ? to
                 : Settlement.NONE;
             ids.addAll(road(kind, piece, f, t, false));
         }
         return ids;
     }
 
-    private boolean touchesSquare(Line line) {
+    private boolean touchesSquare(Polyline2 line) {
         for (int i = 0; i < line.count(); i++) {
-            if (square.outside(line.x[i], line.z[i]) <= 0) {
+            if (square.outside(line.x[i], line.y[i]) <= 0) {
                 return true;
             }
         }
@@ -471,13 +477,13 @@ final class Planner {
      * within the class's grade (cut and filled), its ends at the heights of what they join; split where its surface
      * changes (cobbles in the core). Marks its nodes as the network's. The ids added.
      */
-    private List<Integer> road(RoadKind kind, Line line, int from, int to, boolean barnPath) {
+    private List<Integer> road(RoadKind kind, Polyline2 line, int from, int to, boolean barnPath) {
         SettlementParameters.RoadClass rc = p.road(kind);
-        Line l = line.resample(p.network().step());
+        Polyline2 l = line.resample(p.network().step());
         int m = l.count();
         double[] y = new double[m];
         for (int i = 0; i < m; i++) {
-            y[i] = field.heightAt(l.x[i], l.z[i]);
+            y[i] = field.heightAt(l.x[i], l.y[i]);
         }
         // a moving mean over some 12 m: the profile eases over the ground's bumps
         double[] smooth = new double[m];
@@ -491,8 +497,8 @@ final class Planner {
             }
             smooth[i] = sum / c;
         }
-        double startY = junctionHeight(from, l.x[0], l.z[0]);
-        double endY = junctionHeight(to, l.x[m - 1], l.z[m - 1]);
+        double startY = junctionHeight(from, l.x[0], l.y[0]);
+        double endY = junctionHeight(to, l.x[m - 1], l.y[m - 1]);
         if (!Double.isNaN(startY)) {
             smooth[0] = startY;
         }
@@ -503,9 +509,9 @@ final class Planner {
         // pieces by surface: cobbles in the core for the main road and lanes
         List<Integer> ids = new ArrayList<>();
         int pieceStart = 0;
-        RoadSurface current = surface(kind, l.x[0], l.z[0]);
+        RoadSurface current = surface(kind, l.x[0], l.y[0]);
         for (int i = 1; i <= m - 1; i++) {
-            RoadSurface s = i == m - 1 ? current : surface(kind, l.x[i], l.z[i]);
+            RoadSurface s = i == m - 1 ? current : surface(kind, l.x[i], l.y[i]);
             if (s != current || i == m - 1) {
                 int pieceEnd = i;
                 if (pieceEnd - pieceStart >= 1) {
@@ -524,13 +530,13 @@ final class Planner {
         return ids;
     }
 
-    private Integer add(RoadKind kind, RoadSurface surface, double width, Line line, double[] y, int from, int to) {
+    private Integer add(RoadKind kind, RoadSurface surface, double width, Polyline2 line, double[] y, int from, int to) {
         int id = roads.size();
-        roads.add(new Road(id, kind, surface, width, line.x, y, line.z, from, to));
+        roads.add(new Road(id, kind, surface, width, line.x, y, line.y, from, to));
         lines.add(line);
         roadSteps.add(step++);
         for (int i = 0; i < line.count(); i++) {
-            int a = field.node(line.x[i], line.z[i]);
+            int a = field.node(line.x[i], line.y[i]);
             if (a >= 0) {
                 onRoad[a] = true;
             }
@@ -540,7 +546,7 @@ final class Planner {
 
     private RoadSurface surface(RoadKind kind, double x, double z) {
         return switch (kind) {
-            case MAIN, LANE -> Geometry.length(x - ox, z - oz) <= p.core().coreRadius() ? RoadSurface.COBBLES
+            case MAIN, LANE -> Polygons.length(x - ox, z - oz) <= p.core().coreRadius() ? RoadSurface.COBBLES
                 : RoadSurface.GRAVEL;
             case TRACK -> RoadSurface.GRAVEL;
             case FOOTPATH -> RoadSurface.DIRT;
@@ -564,7 +570,7 @@ final class Planner {
      * Keeps the profile {@code y} within {@code maxGrade} between neighbouring points: passes clamping each point to
      * its neighbour's reach, forward from a fixed start, backward from a fixed end, until nothing moves.
      */
-    static void grade(Line l, double[] y, double maxGrade, boolean fixedStart, boolean fixedEnd) {
+    static void grade(Polyline2 l, double[] y, double maxGrade, boolean fixedStart, boolean fixedEnd) {
         int m = y.length;
         double limit = maxGrade * (1 - 1e-6);
         for (int it = 0; it < 200; it++) {
@@ -608,16 +614,19 @@ final class Planner {
         square.point(0, square.halfWidth(), south);
         innSide = north[1] <= south[1] ? -1 : 1; // the side (across) whose edge lies further north
         SettlementParameters.Buildings b = p.buildings();
-        reserve(innSide, 14 + 2 * b.sideGap(), 9.5 + b.coreSetback() + b.sideGap(), BuildingKind.INN, 14, 9.5, 2);
-        reserve(-innSide, 10.5 + 2 * b.sideGap(), 22 + 2 + b.sideGap(), BuildingKind.CHURCH, 10.5, 22, 1);
+        BuildingKind inn = BuildingKind.INN;
+        BuildingKind church = BuildingKind.CHURCH;
+        reserve(innSide, inn.width() + 2 * b.sideGap(), inn.depth() + b.coreSetback() + b.sideGap(), inn,
+            inn.width(), inn.depth());
+        reserve(-innSide, church.width() + 2 * b.sideGap(), church.depth() + 2 + b.sideGap(), church,
+            church.width(), church.depth());
     }
 
     /**
      * A plot of {@code frontage} by {@code depth} on the square's side {@code side} (across), slid along it until it
      * keeps off the roads, and its building ({@code kind}, {@code width} by {@code depth}) facing the square.
      */
-    private void reserve(int side, double frontage, double depth, BuildingKind kind, double width, double bDepth,
-        int floors) {
+    private void reserve(int side, double frontage, double depth, BuildingKind kind, double width, double bDepth) {
         double edge = side * (square.halfWidth() + 0.5);
         double room = square.halfLength() - frontage / 2;
         for (double shift : new double[] {0, room * 0.5, -room * 0.5, room, -room}) {
@@ -649,15 +658,16 @@ final class Planner {
             square.point(0, -side, fc);
             double fx = fc[0] - square.x();
             double fz = fc[1] - square.z();
-            BuildingSpec spec = new BuildingSpec(kind, width, bDepth, floors, kind == BuildingKind.CHURCH
-                ? BuildingSpec.Ridge.ALONG : ridge(), Seeds.derive(seed, 100 + kind.ordinal()));
-            place(spec, centre[0], centre[1], Maths.atan2(fx, fz), plot.id(), Settlement.SQUARE);
+            // the gable (and door) to the square
+            place(kind, width, bDepth, 0, true, Seeds.derive(seed, 100 + kind.ordinal()), centre[0], centre[1],
+                Maths.atan2(fx, fz), plot.id(), Settlement.SQUARE);
             return;
         }
     }
 
-    private BuildingSpec.Ridge ridge() {
-        return p.buildings().eavesToValley() ? BuildingSpec.Ridge.ACROSS : BuildingSpec.Ridge.ALONG;
+    /** Whether houses turn their gable (and door) to where they face; else their eaves (the ridge along the front). */
+    private boolean gableFront() {
+        return !p.buildings().eavesToValley();
     }
 
     /** Marks the nodes within {@code margin} metres of a polygon blocked to roads. */
@@ -672,7 +682,7 @@ final class Planner {
         int j1 = Math.min(field.n - 1, (int) Math.ceil((maxZ - field.z0) / field.cell));
         for (int j = j0; j <= j1; j++) {
             for (int i = i0; i <= i1; i++) {
-                if (Geometry.depth(field.x(i), field.z(j), px, pz) > -margin) {
+                if (Polygons.convexDepth(field.x(i), field.z(j), px, pz) > -margin) {
                     blocked[j * field.n + i] = true;
                 }
             }
@@ -700,7 +710,7 @@ final class Planner {
                     || Math.max(az, bz) < minZ - clear || Math.min(az, bz) > maxZ + clear) {
                     continue;
                 }
-                double d = Geometry.segmentPolygon(ax, az, bx, bz, px, pz);
+                double d = Polygons.segmentPolygonDistance(ax, az, bx, bz, px, pz);
                 if (d < clear) {
                     worst = Math.max(worst, clear - d);
                 }
@@ -725,7 +735,7 @@ final class Planner {
     }
 
     /** Walks along one side of {@code road}, laying plots where they fit. */
-    private void frontage(Road road, Line line, int side, SplittableRandom random) {
+    private void frontage(Road road, Polyline2 line, int side, SplittableRandom random) {
         SettlementParameters.Plots pp = p.plots();
         double hw = road.width() / 2;
         double length = line.length();
@@ -738,7 +748,7 @@ final class Planner {
         int farmPlots = 0;
         while (s < end) {
             line.at(s, a);
-            double r = Geometry.length(a[0] - ox, a[1] - oz);
+            double r = Polygons.length(a[0] - ox, a[1] - oz);
             boolean core = r < p.core().coreRadius();
             boolean village = r < p.core().villageRadius();
             boolean farmstead = farm && !village && s > length - 70 && road.to() == Settlement.NONE;
@@ -766,7 +776,7 @@ final class Planner {
             double bz = b[1] - side * b[2] * off;
             double ex = bx - ax;
             double ez = bz - az;
-            double chord = Geometry.length(ex, ez);
+            double chord = Polygons.length(ex, ez);
             if (chord < 0.6 * f) {
                 s += 3;
                 continue;
@@ -811,11 +821,11 @@ final class Planner {
         double[] sq = square.corners();
         double[] sx = {sq[0], sq[2], sq[4], sq[6]};
         double[] sz = {sq[1], sq[3], sq[5], sq[7]};
-        if (Geometry.overlap(px, pz, sx, sz, 0.01)) {
+        if (Polygons.convexOverlap(px, pz, sx, sz, 0.01)) {
             return false;
         }
         for (Plot other : plots) {
-            if (Geometry.overlap(px, pz, other.x(), other.z(), 0.01)) {
+            if (Polygons.convexOverlap(px, pz, other.x(), other.z(), 0.01)) {
                 return false;
             }
         }
@@ -846,12 +856,12 @@ final class Planner {
         SplittableRandom random = new SplittableRandom(Seeds.derive(seed, 1000 + plot.id()));
         boolean farm = plot.zone() == Zone.FARMSTEAD;
         boolean barn = farm && farmBarn(plot);
-        BuildingKind kind = barn ? BuildingKind.HAY_BARN : farm ? BuildingKind.FARMHOUSE : BuildingKind.HOUSE;
+        BuildingKind kind = barn ? BuildingKind.HAY_BARN : farm ? BuildingKind.FARMHOUSE : BuildingKind.CHALET;
         double min = barn ? b.barnMin() : farm ? b.farmMin() : b.houseMin();
         double max = barn ? b.barnMax() : farm ? b.farmMax() : b.houseMax();
         double w = random.nextDouble(min, max);
         double d = random.nextDouble(min, max);
-        int floors = barn ? 1 : plot.zone() == Zone.CORE ? 2 + random.nextInt(2) : 2;
+        int floors = barn ? 0 : plot.zone() == Zone.CORE ? 2 + random.nextInt(2) : 2;
         long buildingSeed = Seeds.derive(seed, 2000 + plot.id());
         double[] px = plot.x();
         double[] pz = plot.z();
@@ -859,10 +869,10 @@ final class Planner {
         double fz = (pz[0] + pz[1]) / 2;
         double ex = px[1] - px[0];
         double ez = pz[1] - pz[0];
-        double el = Geometry.length(ex, ez);
+        double el = Polygons.length(ex, ez);
         double mx = px[3] - px[0];
         double mz = pz[3] - pz[0];
-        double ml = Geometry.length(mx, mz);
+        double ml = Polygons.length(mx, mz);
         mx /= ml;
         mz /= ml;
         double setback = plot.zone() == Zone.CORE ? b.coreSetback() : b.setback();
@@ -877,8 +887,8 @@ final class Planner {
                 double cz = fz + mz * ml * 0.45;
                 double yaw = Maths.atan2(facing[0], facing[1]);
                 if (inPlot(plot, cx, cz, yaw, sw, sd) && sited(cx, cz, yaw, sw, sd, barn)) {
-                    place(new BuildingSpec(kind, sw, sd, floors, ridge(), buildingSeed), cx, cz, yaw, plot.id(),
-                        plot.road());
+                    place(kind, sw, sd, floors, gableFront(), buildingSeed, cx, cz, yaw, plot.id(), plot.road());
+                    woodshed(plot, kind);
                     return;
                 }
             }
@@ -888,8 +898,8 @@ final class Planner {
             double cz = fz + mz * (setback + sd / 2);
             if (sw <= el - 2 * b.sideGap() + 1e-9 && inPlot(plot, cx, cz, yaw, sw, sd)
                 && sited(cx, cz, yaw, sw, sd, barn)) {
-                place(new BuildingSpec(kind, sw, sd, floors, ridge(), buildingSeed), cx, cz, yaw, plot.id(),
-                    plot.road());
+                place(kind, sw, sd, floors, gableFront(), buildingSeed, cx, cz, yaw, plot.id(), plot.road());
+                woodshed(plot, kind);
                 return;
             }
         }
@@ -899,7 +909,8 @@ final class Planner {
     private boolean farmBarn(Plot plot) {
         for (Building other : buildings) {
             if (other.plot() >= 0 && plots.get(other.plot()).road() == plot.road()
-                && plots.get(other.plot()).zone() == Zone.FARMSTEAD) {
+                && plots.get(other.plot()).zone() == Zone.FARMSTEAD
+                && other.spec().kind() == BuildingKind.FARMHOUSE) {
                 return true;
             }
         }
@@ -916,7 +927,7 @@ final class Planner {
             double lz = (k >= 2 ? 0.5 : -0.5) * d;
             double x = cx + lx * c + lz * s;
             double z = cz - lx * s + lz * c;
-            if (Geometry.depth(x, z, plot.x(), plot.z()) < gap - 1e-9) {
+            if (Polygons.convexDepth(x, z, plot.x(), plot.z()) < gap - 1e-9) {
                 return false;
             }
         }
@@ -940,23 +951,58 @@ final class Planner {
         return true;
     }
 
-    /** Adds a building: its ground floor at the highest ground under it, its foundation to the lowest. */
-    private void place(BuildingSpec spec, double cx, double cz, double yaw, int plot, int road) {
-        double c = Maths.cos(yaw);
-        double s = Maths.sin(yaw);
+    /**
+     * Adds a building of {@code kind}, {@code w} across the way it faces ({@code yaw}) by {@code d} deep, as the
+     * buildings generator's spec: its footprint turned so its gable faces that way ({@code gable}), else its eaves (the
+     * generator's ridge runs along a footprint's depth, so the footprint turns a quarter and swaps its sides).
+     * {@code floors} 0: the kind's. Its ground floor at the highest ground under it, its foundation to the lowest.
+     */
+    private void place(BuildingKind kind, double w, double d, int floors, boolean gable, long buildingSeed, double cx,
+        double cz, double yaw, int plot, int road) {
+        Footprint footprint = gable ? new Footprint(cx, cz, yaw, w, d)
+            : new Footprint(cx, cz, Maths.wrapAngle(yaw + Math.PI / 2), d, w);
+        BuildingSpec spec = BuildingSpec.of(kind, footprint, buildingSeed);
+        if (floors > 0) {
+            spec = spec.withFloors(floors);
+        }
         double high = -Double.MAX_VALUE;
         double low = Double.MAX_VALUE;
         for (int u = -2; u <= 2; u++) {
             for (int v = -2; v <= 2; v++) {
-                double lx = u * spec.width() / 4;
-                double lz = v * spec.depth() / 4;
-                double h = field.heightAt(cx + lx * c + lz * s, cz - lx * s + lz * c);
+                double lx = u * footprint.width() / 4;
+                double lz = v * footprint.depth() / 4;
+                double h = field.heightAt(footprint.worldX(lx, lz), footprint.worldZ(lx, lz));
                 high = Math.max(high, h);
                 low = Math.min(low, h);
             }
         }
-        buildings.add(new Building(buildings.size(), spec, cx, high, cz, yaw, low, plot, road));
+        buildings.add(new Building(buildings.size(), spec, high, low, plot, road));
         buildingSteps.add(step++);
+    }
+
+    /**
+     * A woodshed beside a farmstead's farmhouse, in its plot: at either side or behind, turned with it, where it fits
+     * and is sited.
+     */
+    private void woodshed(Plot plot, BuildingKind kind) {
+        if (kind != BuildingKind.FARMHOUSE) {
+            return;
+        }
+        Footprint f = buildings.getLast().spec().footprint();
+        BuildingKind shed = BuildingKind.WOODSHED;
+        double gap = 1.5;
+        double[][] at = {{f.width() / 2 + gap + shed.width() / 2, 0}, {-f.width() / 2 - gap - shed.width() / 2, 0},
+            {0, -f.depth() / 2 - gap - shed.depth() / 2}};
+        for (double[] local : at) {
+            double cx = f.worldX(local[0], local[1]);
+            double cz = f.worldZ(local[0], local[1]);
+            if (inPlot(plot, cx, cz, f.yaw(), shed.width(), shed.depth())
+                && sited(cx, cz, f.yaw(), shed.width(), shed.depth(), true)) {
+                place(shed, shed.width(), shed.depth(), 0, true, Seeds.derive(seed, 4000 + plot.id()), cx, cz,
+                    f.yaw(), plot.id(), plot.road());
+                return;
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------------------------------------- barns
@@ -980,7 +1026,7 @@ final class Planner {
                 double w = random.nextDouble(p.buildings().barnMin(), p.buildings().barnMax());
                 double d = random.nextDouble(p.buildings().barnMin(), p.buildings().barnMax());
                 if (draw >= bp.density() || !field.contains(x, z, 6 * field.cell)
-                    || Geometry.length(x - ox, z - oz) < p.core().villageRadius() * 0.6
+                    || Polygons.length(x - ox, z - oz) < p.core().villageRadius() * 0.6
                     || field.meadowAt(x, z) < bp.meadow() || nearRoad(x, z, bp.clearance()) || nearPlot(x, z,
                     bp.clearance()) || near(barns, x, z, 0.7 * bp.spacing())) {
                     continue;
@@ -1008,8 +1054,8 @@ final class Planner {
                     continue;
                 }
                 barns.add(new double[] {x, z});
-                place(new BuildingSpec(BuildingKind.HAY_BARN, w, d, 1, ridge(), Seeds.derive(seed, 3000 + ci
-                    + 1000L * cj)), x, z, yaw, Settlement.NONE, roads.size() - 1);
+                place(BuildingKind.HAY_BARN, w, d, 0, gableFront(), Seeds.derive(seed, 3000 + ci + 1000L * cj), x, z,
+                    yaw, Settlement.NONE, roads.size() - 1);
             }
         }
     }
@@ -1034,7 +1080,7 @@ final class Planner {
 
     private boolean nearPlot(double x, double z, double distance) {
         for (Plot plot : plots) {
-            if (Geometry.depth(x, z, plot.x(), plot.z()) > -distance) {
+            if (Polygons.convexDepth(x, z, plot.x(), plot.z()) > -distance) {
                 return true;
             }
         }
@@ -1043,7 +1089,7 @@ final class Planner {
 
     private static boolean near(List<double[]> points, double x, double z, double distance) {
         for (double[] q : points) {
-            if (Geometry.length(q[0] - x, q[1] - z) < distance) {
+            if (Polygons.length(q[0] - x, q[1] - z) < distance) {
                 return true;
             }
         }
@@ -1082,12 +1128,11 @@ final class Planner {
             if (b.plot() >= 0 && plot < 0) {
                 continue;
             }
-            keptBuildings.add(new Building(keptBuildings.size(), b.spec(), b.x(), b.y(), b.z(), b.yaw(),
-                b.foundation(), plot, b.road()));
+            keptBuildings.add(new Building(keptBuildings.size(), b.spec(), b.y(), b.foundation(), plot, b.road()));
             keptBuildingSteps.add(buildingSteps.get(b.id()));
         }
-        Grading grading = Rasters.grading(p, field, roads, square);
-        Clearing clearing = Rasters.clearing(p, field, roads, square, keptPlots, keptBuildings);
+        Grading grading = Rasters.grading(p, field, roads, square, Seeds.derive(seed, 7));
+        Clearing clearing = Rasters.clearing(p, field, grading, square, keptPlots, keptBuildings);
         Furnishing furnishing = new Furnishing(p, field, grading, roads, lines, square, innSide, keptPlots,
             keptBuildings, barnPaths, Seeds.derive(seed, 6));
         int[] order = new int[roads.size() + keptPlots.size() + keptBuildings.size()];

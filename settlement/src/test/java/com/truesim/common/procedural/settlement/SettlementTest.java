@@ -1,8 +1,11 @@
 package com.truesim.common.procedural.settlement;
 
+import com.truesim.common.math.geometry.Polygons;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.truesim.common.procedural.building.BuildingKind;
 import com.truesim.common.procedural.ecology.Ecology;
 import com.truesim.common.procedural.ecology.Site;
 import com.truesim.common.procedural.settlement.Settlement.Building;
@@ -38,6 +41,9 @@ class SettlementTest {
             PropKind.TABLE_SET, PropKind.WOODPILE, PropKind.SIGNPOST);
         assertThat(village.buildings()).filteredOn(b -> b.spec().kind() == BuildingKind.CHURCH).hasSize(1);
         assertThat(village.buildings()).filteredOn(b -> b.spec().kind() == BuildingKind.INN).hasSize(1);
+        // a woodshed beside a farmhouse, in its plot
+        assertThat(village.buildings()).filteredOn(b -> b.spec().kind() == BuildingKind.WOODSHED)
+            .allMatch(b -> b.plot() >= 0 && village.plots().get(b.plot()).zone() == Settlement.Zone.FARMSTEAD);
         assertThat(village.buildings().size()).isGreaterThan(30);
     }
 
@@ -74,7 +80,7 @@ class SettlementTest {
         for (Road r : s.roads()) {
             double max = s.parameters().road(r.kind()).maxGrade();
             for (int i = 1; i < r.count(); i++) {
-                double run = Geometry.length(r.x()[i] - r.x()[i - 1], r.z()[i] - r.z()[i - 1]);
+                double run = Polygons.length(r.x()[i] - r.x()[i - 1], r.z()[i] - r.z()[i - 1]);
                 assertThat(Math.abs(r.y()[i] - r.y()[i - 1])).as("road %d (%s) at %d", r.id(), r.kind(), i)
                     .isLessThanOrEqualTo(max * run + 1e-9);
             }
@@ -90,19 +96,19 @@ class SettlementTest {
         for (Plot plot : s.plots()) {
             for (Road r : s.roads()) {
                 for (int i = 1; i < r.count(); i++) {
-                    double d = Geometry.segmentPolygon(r.x()[i - 1], r.z()[i - 1], r.x()[i], r.z()[i], plot.x(),
+                    double d = Polygons.segmentPolygonDistance(r.x()[i - 1], r.z()[i - 1], r.x()[i], r.z()[i], plot.x(),
                         plot.z());
                     assertThat(d).as("plot %d and road %d", plot.id(), r.id()).isGreaterThanOrEqualTo(r.width() / 2);
                 }
             }
             for (Plot other : s.plots()) {
                 if (other != plot) {
-                    assertThat(Geometry.overlap(plot.x(), plot.z(), other.x(), other.z(), 0.01))
+                    assertThat(Polygons.convexOverlap(plot.x(), plot.z(), other.x(), other.z(), 0.01))
                         .as("plots %d and %d", plot.id(), other.id()).isFalse();
                 }
             }
             double[] c = s.square().corners();
-            assertThat(Geometry.overlap(plot.x(), plot.z(), new double[] {c[0], c[2], c[4], c[6]},
+            assertThat(Polygons.convexOverlap(plot.x(), plot.z(), new double[] {c[0], c[2], c[4], c[6]},
                 new double[] {c[1], c[3], c[5], c[7]}, 0.01)).isFalse();
             assertThat(plot.area()).isGreaterThan(50);
         }
@@ -146,7 +152,7 @@ class SettlementTest {
                 Plot plot = s.plots().get(b.plot());
                 double[] k = b.corners();
                 for (int c = 0; c < 4; c++) {
-                    assertThat(Geometry.depth(k[2 * c], k[2 * c + 1], plot.x(), plot.z())).as("building %d", b.id())
+                    assertThat(Polygons.convexDepth(k[2 * c], k[2 * c + 1], plot.x(), plot.z())).as("building %d", b.id())
                         .isGreaterThan(-1e-6);
                 }
                 // its plot's front on its road (or the square): a front corner across the verge from it
@@ -159,9 +165,12 @@ class SettlementTest {
                 }
                 assertThat(reach).as("plot %d's front", plot.id()).isLessThan(s.parameters().plots().verge() + 0.01);
             } else {
-                b.door(door);
+                // a hay barn: its footpath ends beside it
                 assertThat(road).isNotNull();
-                assertThat(road.distance(door[0], door[1])).as("barn %d's door", b.id()).isLessThan(2.5);
+                double reach = Math.max(b.spec().footprint().width(), b.spec().footprint().depth()) / 2 + 2.5;
+                double[] end = {road.x()[road.count() - 1], road.z()[road.count() - 1]};
+                assertThat(Math.hypot(end[0] - b.x(), end[1] - b.z())).as("barn %d's path", b.id())
+                    .isLessThan(reach);
             }
         }
     }
@@ -198,7 +207,7 @@ class SettlementTest {
             // its footprint no steeper than allowed: the fall across it
             double max = b.spec().kind() == BuildingKind.HAY_BARN ? s.parameters().barns().maxSlope()
                 : siting.maxSlope();
-            double diagonal = Math.sqrt(b.spec().width() * b.spec().width() + b.spec().depth() * b.spec().depth());
+            double diagonal = Math.hypot(b.spec().footprint().width(), b.spec().footprint().depth());
             assertThat(b.y() - b.foundation()).as("building %d's fall", b.id())
                 .isLessThan(Math.tan(Math.toRadians(max + 6)) * diagonal);
         }
@@ -210,16 +219,17 @@ class SettlementTest {
         Field field = new Field(ecology, -60, 0, SettlementParameters.DEFAULTS);
         int valley = 0;
         for (Building b : village.buildings()) {
-            if (b.spec().kind() != BuildingKind.HOUSE && b.spec().kind() != BuildingKind.FARMHOUSE) {
+            if (b.spec().kind() != BuildingKind.CHALET && b.spec().kind() != BuildingKind.FARMHOUSE) {
                 continue;
             }
             field.facing(b.x(), b.z(), 24, SettlementParameters.DEFAULTS.buildings().sunWeight(), facing);
-            double fx = Math.sin(b.yaw());
-            double fz = Math.cos(b.yaw());
+            // eaves to the valley: the generator's ridge runs along its footprint's depth, so its gable faces a
+            // quarter turn from the valley
+            double fx = Math.sin(b.yaw() - Math.PI / 2);
+            double fz = Math.cos(b.yaw() - Math.PI / 2);
             if (fx * facing[0] + fz * facing[1] > 0.99) {
                 valley++;
             }
-            assertThat(b.spec().ridge()).isEqualTo(BuildingSpec.Ridge.ACROSS);
         }
         assertThat(valley).isGreaterThan(5);
     }
@@ -228,10 +238,10 @@ class SettlementTest {
     void parametersAndSpecsCheckTheirValues() {
         assertThatThrownBy(() -> new SettlementParameters.Grid(10, 4, 1)).isInstanceOf(
             IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SettlementParameters.RoadClass(0, 0.1, 20, 1, 100)).isInstanceOf(
+        assertThatThrownBy(() -> new SettlementParameters.RoadClass(0, 0.1, 20, 1, 100, 1)).isInstanceOf(
             IllegalArgumentException.class);
-        assertThatThrownBy(() -> new BuildingSpec(BuildingKind.HOUSE, 0, 1, 1, BuildingSpec.Ridge.ALONG, 1))
-            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new SettlementParameters.Surface(64, 0.3, 0.025, 0.3, 0.14, 0.2, 0.17, 1.5, 2, 0.6,
+            0.15, 1.5, 2, 0.02)).isInstanceOf(IllegalArgumentException.class);
         SettlementParameters p = SettlementParameters.DEFAULTS;
         for (RoadKind kind : RoadKind.values()) {
             assertThat(p.withRoad(kind, SettlementParameters.RoadClass.FOOTPATH).road(kind))
