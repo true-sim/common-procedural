@@ -2,14 +2,14 @@
 
 Procedural assets for true-sim, generated deterministically from parameters and a seed: trees and shrubs with their
 flowers, fruits and cones through the year, meadow flowers, grass and wetland clumps, rocks,
-[fences and walls](#fences) along a line over the ground, and more to come
+[fences and walls](#fences) along a line over the ground, Alpine [buildings](#buildings), and more to come
 ([roadmap](#roadmap)), and the [ecology](#ecology-which-plants-grow-where) that decides which plants grow where.
 The generators are engine-agnostic (common-math only); a second module brings them into the scene's asset system as
 recipe files.
 
 | Module | Package | Contents |
 |---|---|---|
-| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks, fences, their meshes |
+| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks, fences, buildings, their meshes |
 | `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances |
 | `common-procedural-ecology-terrain` | `com.truesim.common.procedural.ecology.terrain` | the ecology over effects-terrain's surface and layers (optional) |
 | `common-procedural-water` | `com.truesim.common.procedural.water` | rivers, streams and waterfalls: channel networks from the flow or mapped watercourses, hydraulic geometry, surface meshes with the flow per vertex, carved beds and banks, bed stones, falls with sheets, jets, spray and mist |
@@ -650,6 +650,146 @@ foot; levels coarser, errors growing, unit normals, tangents across them, UVs be
 written and generating the direct API's fence; through the asset cache, the direct API's meshes and a model at the
 origin, registered grounds, the settings.
 
+## Buildings
+
+`Buildings.generate(spec, ground)` (or a `BuildingGenerator` per thread): Alpine buildings of Lauterbrunnen (Bernese
+Oberland) from a footprint, floors, kind and seed, standing on any ground height function, as closed meshes in four
+levels of detail with their fittings as data. Six kinds:
+
+| Kind | What it is |
+|---|---|
+| `CHALET` | a stone (a third plastered) ground floor under a Blockbau upper floor: horizontal logs whose ends cross at the corners, a band of windows on the front gable, a balcony with cut-out boards and flower boxes, a hearth and chimney, a woodpile under the eaves |
+| `FARMHOUSE` | Bauernhaus: house and barn under one long roof, the house at the front (stone and logs), the barn behind (a stone stable with its door, a board-clad hay loft with a hay door and slits), an arched gable board (Ruendi) under the front's overhang |
+| `HAY_BARN` | Gaden, Stadel: small, a stone stable under a log loft, a hay door, slits, dug into the slope so the stable's door is at the ground before it and the hay door at the ground behind it |
+| `CHURCH` | a whitewashed nave with tall windows and stone surrounds, a steep roof, quoins; a tower before its front with a door through it into the nave, louvred belfry openings, four clocks, an eight-sided spire with a cross |
+| `INN` | Gasthaus: a large chalet of three floors, a plastered ground floor with wide windows (the parlour), balconies on both timber floors, a hanging sign, a board for its name |
+| `WOODSHED` | posts and plates under a small roof, boards with gaps on three sides and the gables, open at the front, full of logs |
+
+```java
+Footprint plot = new Footprint(120, -40, 0.3, 9.5, 11);                 // world x, z, yaw; width, depth
+BuildingSpec spec = BuildingSpec.of(BuildingKind.CHALET, plot, 7)        // floors, roof and pitch: the kind's
+    .withRoof(RoofCover.STONE_WEIGHTED);                                 // shingles, slates, stone-weighted
+Building chalet = Buildings.generate(spec, terrain::height);             // any GroundHeight
+chalet.floor();                                                         // the ground floor's world height
+ProceduralMesh near = chalet.lods().getFirst();                         // a submesh per BuildingSlot
+Anchor fire = chalet.fittings().first(Anchor.Kind.FIRE);                 // in the building's frame
+Vec3 where = chalet.world(fire.position());                              // in the world
+Building plan = Buildings.layout(spec, terrain::height);                 // floor and fittings only: no meshes
+```
+
+**The frame:** x across the front (the footprint's width), z along the ridge (its depth), +z the front gable, y up
+from the ground floor. Placed by the translation (`x`, `floor()`, `z`) and the rotation `(0, sin(yaw/2), 0,
+cos(yaw/2))`: the showcase's convention.
+
+**What is built:**
+
+- **Roofs** of the kind's pitch (chalets and farmhouses 24 degrees, inns 22, hay barns 25, the church 38; stone-weighted
+  roofs no steeper than 22), deep overhangs at the eaves and the gables (a chalet's 1.3 and 1.8 m), covered with
+  shingles, slates, or shingles held down by rows of stones on poles across the slope; a ridge, wall plates, the
+  rafters' ends under the eaves, purlins standing out under the gables with carved console ends, knee braces under
+  them, gable boards along the verges with scalloped lower edges.
+- **Walls** with their thickness (stone 0.5 m, logs 0.22, the church's 0.8), openings cut through them: windows in
+  their reveals with frames, a mullion and transoms (sash bars), glass, a sill outside, on log walls a casing and a
+  carved crown board, on stone a timber lintel, on the church stone surrounds; shutters on some (painted, with
+  battens), flower boxes under some with geraniums; doors with their leaves (panelled, a handle; the inn's and the
+  church's standing open), casings, and steps; hay doors with battens and a brace; belfry louvres. Log walls show
+  their logs' ends crossing at every corner, course by course; a band beam runs round the house where the logs start,
+  dentils under it on the front.
+- **Foundations** follow the slope: the ground floor stands its clearance above the highest ground under the footprint;
+  a stone plinth runs round it in runs of at most a step (1.6 m), each reaching the embedding (0.5 m) below the
+  lowest ground along it, so it steps down the slope and meets the ground everywhere. Where it stands 2.1 m or more at
+  a face's middle, a door into it (a cellar's, a stable's; `CELLAR_DOOR`). Steps lead from each door down to the
+  ground: a few straight out, more along the wall toward the higher ground, as the stone stairs of houses on slopes
+  run. Hay barns are dug in instead.
+- **Rooms** on the ground floor (and the floors above): floors of boards, ceilings with beams, inner walls, a partition
+  with a doorway between the parlour and the kitchen, an open hearth against it (hearthstone, cheeks, lintel, hood,
+  a mantel, logs), the chimney rising from it through the roof to a capped top; the church's nave and the tower's
+  vestibule. Windows look into them.
+- **Balconies** on the front gable's upper floors: boards on cantilevered brackets with carved ends, posts, rails,
+  boards with cut-out silhouettes (a tulip, a heart over a diamond, a chain of rounds, one per building) completed by
+  their neighbours, flower boxes on the rail.
+- **Woodpiles** under the eaves of a side wall: split logs (six-sided, their sawn ends out) stacked on the ground.
+
+**Materials** are named slots (`BuildingSlot`, a submesh each, in order, empty where unused): `stone plaster timber
+trim shingles slates interior floor glass window hearth shutters door metal firewood foliage flowers`. A consumer binds
+textures (Poly Haven's scans in the showcase); texture coordinates are in repeats of each slot's real size
+(`BuildingOptions.repeat`: stone 2 m, plaster 3, ...), u along a face and v down it, so textures stand upright at their
+size, and wood runs its grain along each piece (textures of upright boards: log walls turn them into horizontal
+logs). Coordinates stay small: every face is cut into cells of at most `cell` metres (2), each starting at its own
+repeat's fraction, so they stay under `1 + cell / repeat` (tested), as half floats need.
+
+**Levels** (`Building.lods()`, `error` in metres): 0 everything; 1 without small carving, sash bars, flowers and
+single logs (0.06); 2 closed walls with dark panes (`window`), no rooms, plain balconies (0.3); 3 the volumes (0.9). A
+chalet: about 33,000, 8,400, 3,600 and 1,800 triangles. A cluster hierarchy built from a level does not simplify (a
+building is many small closed solids, their faces split at texture seams): its levels are its detail.
+
+**Fittings** (`Building.fittings()`, in the building's frame) are data:
+
+- `anchors()`: `FIRE` (the hearth's firebox), `CHIMNEY` (its top, for smoke), `CEILING_LAMP` (one per room), `DOOR`
+  (each door's threshold, facing out), `LANTERN` (beside the main door at head height), `BENCH` (by the door, and a
+  corner bench inside), `TABLE`, `CHAIR`, `CABINET`, `BED`, `BAR`, `SIGN`, `NAME_BOARD`, `TERRACE_TABLE` (the inn's),
+  `WOODPILE`, `BELL`, `CLOCK`, `ALTAR`, `PEW` (the church's), `CELLAR_DOOR`; each with a yaw (0 faces +z) and its
+  room (or -1 outside).
+- `rooms()`: each room's box (an indoor zone: no outdoor fog, no rain, dimmer sky light), its name and floor.
+- `openings()`: every window, door, hay door, slit and belfry opening: its middle on the outer face, outward normal,
+  size, the wall's depth and the room behind (lit windows, light portals).
+
+**Settings** (`BuildingSettings`, through `BuildingSettings.options(settings)` into `BuildingOptions`):
+`procedural.buildings.cell` (2 m), `.clearance` (0.3 m), `.embed` (0.5 m), `.step` (1.6 m), `.interiors` (on).
+
+### Through the asset manager
+
+A `.building` recipe loads as meshes (`#lod/0` to `#lod/3`, no billboard), a model (level `ModelDetail.plantLevel`,
+0) and a layout (`BuildingAssets.LAYOUT`: the floor's height and fittings), the ground under it a plane of its grades:
+
+```
+# game://village/chalet-a.building
+generator = building
+preset = chalet               # chalet farmhouse hay-barn church inn woodshed
+seed = 7
+width = 9.5                   # across the front gable (the kind's by default)
+depth = 11                    # along the ridge
+floors = 2
+roof = stone-weighted         # shingles slates stone-weighted (the seed's by default)
+pitch = 22                    # degrees
+grade.x = 0.1                 # the ground's rise per metre across and along (0: level)
+grade.z = -0.25
+material.stone = game://materials/old-stone-wall.material
+material.timber = game://materials/larch-logs.material
+```
+
+```java
+ProceduralAssets procedural = new ProceduralAssets(paths, cache).install();     // .building included
+BuildingAssets.options(procedural, BuildingSettings.options(settings));         // the settings' tunables
+AssetRef<ModelData> chalet = paths.ref(RenderAssets.MODEL, "game://village/chalet-a.building");
+AssetRef<Building> layout = paths.ref(BuildingAssets.LAYOUT, "game://village/chalet-a.building");
+// buildings generated over real terrain (a settlement's): generated assets keyed by the building
+AssetRef<ModelData> placed = BuildingAssets.model(building, 0, false, materialsBySlot);
+AssetRef<MeshData> far = BuildingAssets.mesh(building, 2, false);
+```
+
+The options key the generation cache with the recipe (a setting changed makes new assets).
+
+### Tested (`BuildingTest`, `BuildingAssetsTest`)
+
+- **Closed shells:** every part (wall, beam, board, pane, stone, log) of every level of every kind, on level ground and
+  on a rolling 25 % slope, three seeds, welded by position, has no open or non-manifold edge.
+- **Foundations meet the ground:** on the slope, all round every kind and at every level, a vertical line through the
+  plinth crosses stone from below the ground (more than 0.3 m) up to the floor; the floor stands its clearance above
+  the highest ground (hay barns: dug in, the uphill ground below the loft).
+- **Openings cut through:** at three points of every opening (between the bars) a ray from outside to the room crosses
+  no wall, roof or hearth, and every window a pane of glass; on level 2 the walls are closed.
+- Also: bit-identical per spec on any thread, the layout alone the same as the building's; levels coarser, slots kept;
+  texture coordinates within their bound, frames orthonormal, walls' textures upright; anchors in their rooms, the fire
+  in the parlour, the chimney above the roof, the church's bell, clocks and pews; a steep slope's cellar door, a stair
+  along the wall, steps straight out on a gentle one; covers and options; a `.building` file through the real asset
+  cache gives the direct API's meshes and layout, recipes in code and buildings on terrain as generated assets,
+  parameters parse, the settings key the cache.
+
+The film (`BuildingFilms` in `preview`, `TRUESIM_BUILDING_FILMS=true ./gradlew -Ptruesim.preview=true
+-Ptruesim.engine=false :preview:test --tests '*BuildingFilms*'`): each kind in a slow orbit on a hillside, a chalet's
+front close up, the levels side by side, the hamlet from above, with the showcase's Poly Haven scans where cached.
+
 ## Ecology: which plants grow where
 
 `common-procedural-ecology` decides what grows at every location of a terrain, from published Alpine ecology: the
@@ -1068,13 +1208,14 @@ rowans, apple trees and dog roses from 50 m (`groupFromFiftyMetres`), in flower 
 
 ## Roadmap
 
-Trees and rocks are in. Next, each an issue:
+Trees, plants, rocks, fences and buildings are in. Next, each an issue:
 
 - [#1](https://github.com/true-sim/common-procedural/issues/1) Rocks: erosion-like detail beyond noise, clusters and
   scree fields
 - [#2](https://github.com/true-sim/common-procedural/issues/2) Plants, flowers and grass clumps: meadow flowers,
   grass clumps and dwarf shrubs are in; ferns, sedges and heather cushions to come
-- [#3](https://github.com/true-sim/common-procedural/issues/3) Alpine buildings: chalets with roofs and balconies
+- [#3](https://github.com/true-sim/common-procedural/issues/3) Alpine buildings: chalets, farmhouses, hay barns, the church, the
+  inn and woodsheds are in; more kinds (the sawmill, the mountain hut) and interiors above the ground floor to come
 - [#4](https://github.com/true-sim/common-procedural/issues/4) Fences and paths: fences and walls are in; paths to
   come
 - [#5](https://github.com/true-sim/common-procedural/issues/5) Procedural textures: bark, rock and tileable materials
