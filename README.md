@@ -833,15 +833,17 @@ cos(yaw/2))`: the showcase's convention.
   boards with cut-out silhouettes (a tulip, a heart over a diamond, a chain of rounds, one per building) completed by
   their neighbours, flower boxes on the rail.
 - **Woodpiles** under the eaves of a side wall: split logs (six-sided, their sawn ends out) stacked on the ground.
-- **Geraniums** in the flower boxes (`Geraniums`, meshed by the flora's `FloraWriter`): zonal geraniums (a mound of
-  round, cupped leaves; stems holding ball-shaped umbels of 16 to 24 flowers above it) and ivy-leaf geraniums along
-  the front, trailing over the edge and hanging down with their leaves and umbels; scarlet, pink or cerise and as full
-  as each box's seed says (the same plants on every level). Level 0 every flower (single-triangle petals among so
-  many), level 1 fewer and simpler, level 2 two cards (a band of leaves over the edge, a band of flowers), level 3
-  none; each level within a budget per metre of box (3,200, 450, 8 and 0 triangles: an inn full of boxes stays under
-  half its nearest level). Leaves and petals are single sheets for two-sided materials, colored from
-  `Geraniums.palette()` by texture coordinates: the `foliage` and `flowers` slots' base color (a `.building` recipe's
-  `#palette`).
+- **Geraniums** overflowing the flower boxes (`Geraniums`; flowers and stems meshed by the flora's `FloraWriter`):
+  zonal geraniums packed in two staggered rows, dense mounds of round, scalloped, cupped leaves in the dark zonal
+  green with their horseshoe band, a darker underside sheet behind each, spilling over the rim; ball-shaped umbels of
+  14 to 20 flowers close together above them; ivy-leaf geraniums along the front hanging in curtains under their
+  weight, 40 to 80 cm over a balcony's railing (25 to 50 under a window), each strand drifting out and swaying its own
+  way, leafy and flowering all down its length. Scarlet, pink or cerise and as full as each box's seed says, the same
+  plants on every level. Level 0 every leaf and flower, level 1 fewer and simpler (hexagonal leaves), level 2 two cards
+  (a curtain of leaves, a band of flowers), level 3 none; each level within a budget per metre of box (14,000, 3,000,
+  8 and 0 triangles: overflowing boxes are dense close up, cheap from the next level on). Colored from
+  `Geraniums.palette()` by texture coordinates: the `foliage` and `flowers` slots' base color (a `.building`
+  recipe's `#palette`), on two-sided materials.
 
 **Materials** are named slots (`BuildingSlot`, a submesh each, in order, empty where unused; `foliage` and
 `flowers` colored from the geraniums' palette): `stone plaster timber

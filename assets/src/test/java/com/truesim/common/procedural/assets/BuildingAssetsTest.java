@@ -164,8 +164,15 @@ class BuildingAssetsTest {
         AssetRef<MeshData> ref = BuildingAssets.mesh(onTerrain, 1, true);
         assertThat(ref).isEqualTo(BuildingAssets.mesh(onTerrain, 1, true));
         MeshData hierarchy = load(ref);
-        // a building's hierarchy does not simplify (closed solids, seams): its levels are its detail
-        assertThat(hierarchy.triangleCount()).isEqualTo(onTerrain.lods().get(1).triangleCount());
+        // a building's hierarchy hardly simplifies (closed solids, seams): its levels are its detail; at full
+        // detail it is the level
+        int full = 0;
+        double[] lod = new double[10];
+        for (int m = 0; m < hierarchy.meshletCount(); m++) {
+            hierarchy.meshletLod(m, lod);
+            full += lod[4] == 0 ? hierarchy.meshletTriangleCount(m) : 0;
+        }
+        assertThat(full).isEqualTo(onTerrain.lods().get(1).triangleCount());
         Map<BuildingSlot, AssetRef<MaterialData>> materials = new HashMap<>();
         for (BuildingSlot slot : BuildingSlot.all()) {
             materials.put(slot, paths.ref(RenderAssets.MATERIAL, named.get(slot)));
