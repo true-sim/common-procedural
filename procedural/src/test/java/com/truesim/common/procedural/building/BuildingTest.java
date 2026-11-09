@@ -66,7 +66,9 @@ class BuildingTest {
                 int[][] byPart = new int[partCount][];
                 int[] counts = new int[partCount];
                 for (int part : parts) {
-                    counts[part]++;
+                    if (part >= 0) { // flora sheets (-1) are single sheets, not shells
+                        counts[part]++;
+                    }
                 }
                 for (int p = 0; p < partCount; p++) {
                     byPart[p] = new int[3 * counts[p]];
@@ -75,6 +77,9 @@ class BuildingTest {
                 int[] indices = mesh.indices();
                 for (int t = 0; t < parts.length; t++) {
                     int p = parts[t];
+                    if (p < 0) {
+                        continue;
+                    }
                     System.arraycopy(indices, 3 * t, byPart[p], 3 * counts[p]++, 3);
                 }
                 for (int p = 0; p < partCount; p++) {

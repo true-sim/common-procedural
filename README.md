@@ -709,8 +709,18 @@ cos(yaw/2))`: the showcase's convention.
   boards with cut-out silhouettes (a tulip, a heart over a diamond, a chain of rounds, one per building) completed by
   their neighbours, flower boxes on the rail.
 - **Woodpiles** under the eaves of a side wall: split logs (six-sided, their sawn ends out) stacked on the ground.
+- **Geraniums** in the flower boxes (`Geraniums`, meshed by the flora's `FloraWriter`): zonal geraniums (a mound of
+  round, cupped leaves; stems holding ball-shaped umbels of 16 to 24 flowers above it) and ivy-leaf geraniums along
+  the front, trailing over the edge and hanging down with their leaves and umbels; scarlet, pink or cerise and as full
+  as each box's seed says (the same plants on every level). Level 0 every flower (single-triangle petals among so
+  many), level 1 fewer and simpler, level 2 two cards (a band of leaves over the edge, a band of flowers), level 3
+  none; each level within a budget per metre of box (3,200, 450, 8 and 0 triangles: an inn full of boxes stays under
+  half its nearest level). Leaves and petals are single sheets for two-sided materials, colored from
+  `Geraniums.palette()` by texture coordinates: the `foliage` and `flowers` slots' base color (a `.building` recipe's
+  `#palette`).
 
-**Materials** are named slots (`BuildingSlot`, a submesh each, in order, empty where unused): `stone plaster timber
+**Materials** are named slots (`BuildingSlot`, a submesh each, in order, empty where unused; `foliage` and
+`flowers` colored from the geraniums' palette): `stone plaster timber
 trim shingles slates interior floor glass window hearth shutters door metal firewood foliage flowers`. A consumer binds
 textures (Poly Haven's scans in the showcase); texture coordinates are in repeats of each slot's real size
 (`BuildingOptions.repeat`: stone 2 m, plaster 3, ...), u along a face and v down it, so textures stand upright at their
@@ -788,7 +798,8 @@ The options key the generation cache with the recipe (a setting changed makes ne
 
 The film (`BuildingFilms` in `preview`, `TRUESIM_BUILDING_FILMS=true ./gradlew -Ptruesim.preview=true
 -Ptruesim.engine=false :preview:test --tests '*BuildingFilms*'`): each kind in a slow orbit on a hillside, a chalet's
-front close up, the levels side by side, the hamlet from above, with the showcase's Poly Haven scans where cached.
+front close up, the levels side by side, the hamlet from above, with the showcase's Poly Haven scans where cached;
+`TRUESIM_GERANIUM_FILM=true`: along a chalet's balcony boxes and the inn's front, close.
 
 ## Ecology: which plants grow where
 
