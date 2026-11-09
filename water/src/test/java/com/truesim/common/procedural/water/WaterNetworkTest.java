@@ -370,4 +370,36 @@ class WaterNetworkTest {
         assertTrue(WaterNetwork.build(Landscapes.plane(), region, WaterParameters.DEFAULTS).channels().stream()
             .noneMatch(c -> c.name().equals("Brook")));
     }
+
+    @Test
+    void theSheetsLedgesAreSmoothedNeverIntoTheRock() {
+        // a path falling north (direction 0, -1) held off the face: out 0 m, then a jump to 6 m at sample 20
+        int n = 60;
+        double[] x = new double[n];
+        double[] y = new double[n];
+        double[] z = new double[n];
+        double[] zero = new double[n];
+        double[] w = new double[n];
+        for (int k = 0; k < n; k++) {
+            y[k] = -2.0 * k;
+            z[k] = k < 20 ? 0 : -6;
+            x[k] = 0.1 * k;
+            w[k] = 2;
+        }
+        Waterfall.Path path = new Waterfall.Path(x, y, z, zero, zero, zero, zero, w);
+        Waterfall.Path smooth = WaterMeshes.smooth(path, 0, -1);
+        double steepest = 0;
+        for (int k = 0; k < n; k++) {
+            assertTrue(-smooth.z()[k] >= -z[k] - 1e-9, "never closer to the rock");
+            assertEquals(x[k], smooth.x()[k], 1e-9, "the sideways position kept");
+            assertEquals(y[k], smooth.y()[k], 1e-12);
+            if (k > 0) {
+                steepest = Math.max(steepest, Math.abs(smooth.z()[k] - smooth.z()[k - 1]));
+            }
+        }
+        assertTrue(steepest < 3, "the 6 m ledge spread over samples: " + steepest);
+        assertEquals(0, smooth.z()[0], 1e-12);
+        assertTrue(WaterMeshes.smooth(new Waterfall.Path(new double[2], new double[2], new double[2], new double[2],
+            new double[2], new double[2], new double[2], new double[2]), 1, 0).count() == 2);
+    }
 }
