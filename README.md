@@ -9,8 +9,8 @@ recipe files.
 
 | Module | Package | Contents |
 |---|---|---|
-| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks, fences, buildings, their meshes |
-| `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances |
+| `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks with moss and lichen, fences, buildings, their meshes |
+| `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances; where rocks lie (talus, rockfall, streams, clearance piles, erratics) |
 | `common-procedural-ecology-terrain` | `com.truesim.common.procedural.ecology.terrain` | the ecology over effects-terrain's surface and layers (optional) |
 | `common-procedural-water` | `com.truesim.common.procedural.water` | rivers, streams and waterfalls: channel networks from the flow or mapped watercourses, hydraulic geometry, surface meshes with the flow per vertex, carved beds and banks, bed stones, falls with sheets, jets, spray and mist |
 | `common-procedural-settlement` | `com.truesim.common.procedural.settlement` | a village's plan on the terrain: roads by least-cost paths, the square, plots, buildings as specs, props, lamps, fences; clearings, grading, road meshes |
@@ -530,12 +530,136 @@ the axis, all 16 phases used, branch weights reaching 1. effects-vegetation's pl
 
 ## Rocks
 
-`Rocks.generate(RockParams, seed)`: a subdivided icosahedron whose every direction is pushed to the rock's surface,
-so all levels sample one surface: an ellipsoid cut by random planes (cleavage: flat faces, sharp edges), lumped by
-fractal noise, carved by ridged noise (crests and gullies, as weathering leaves), cracked along the borders of Worley
-cells, banded by strata, and cut flat where buried. Presets `BOULDER`, `BLOCK`, `SLAB`, `SCREE`; four levels (20 · 4^n
-triangles), each closed and wound outward, its error the largest gap between its edges and the surface. UV is a planar
-projection from above in metres (rock materials usually map triplanar); wind is zero. More is #1.
+```java
+Rock block = Rocks.generate(RockParams.BLOCK, 42);                                // bare
+Rock mossy = Rocks.generate(RockParams.BOULDER, new RockCover(0.8, 0.3, yaw, 0.3), 7); // placed turned by yaw
+ProceduralMesh near = block.lods().getFirst();      // submesh 0 weathered (Rock.ROCK), 1 fresh fractures (Rock.FRESH)
+RockFootprint contact = block.footprint();          // its contact with the ground: keeps plants and grass off it
+```
+
+**Shape.** Each stone is a subdivided icosahedron whose every direction is pushed to the stone's surface, so all
+levels sample one surface:
+
+1. **Fracture planes:** a convex polytope, the intersection of half-spaces. A limestone block is bounded by its
+   bedding (a pair of planes on bed boundaries, dipping a few degrees) and two joint sets at right angles to it and to
+   each other (turned off square by `1 - joints`), then random fracture planes. Edges are rounded by weathering as a
+   soft minimum of the planes' distances (`-s log sum exp(-r/s)`), blended toward an ellipsoid for rounded boulders.
+2. **Chips:** small planes knock the farthest corners off: fresh stone, its own submesh (`fresh` material slot).
+3. **Weathering:** lumps (fractal noise), crests and gullies (ridged noise), cracks on the borders of cellular noise's
+   cells; fresh chips keep a third of it.
+4. **Bedding:** grooves where beds meet and each bed weathered back by its own share, so bedded limestone shows its
+   steps (the Lauterbrunnen walls are Malm limestone).
+5. **On the ground:** scaled to its proportions, sunk by its burial (a share of its height) and cut flat 5 % of its
+   size below the ground. A **pile** lays further, smaller stones round the first (the golden angle), a second course
+   on top; each stone is its own closed surface.
+
+| Preset | What | Size |
+|---|---|---|
+| `BLOCK` | a limestone block fallen from a cliff: bedding and joints, chipped corners, grooved beds | 1 m |
+| `SLAB` | a flat slab split along its beds | 1.4 m |
+| `SCREE` | a small sharp stone | 0.25 m |
+| `BOULDER` | rounded by water and weather, no chips | 1.2 m |
+| `ERRATIC` | a big rounded boulder the ice left | 2.6 m |
+| `CLUSTER` | a clearance pile of seven stones | 0.45 m each |
+
+Four levels (20 · 4^n triangles per stone: 20,480 to 320 for a block), each closed and wound outward, its error the
+largest gap between its edges and the surface, never less than the finer level's; through the asset manager a rock's
+model is a cluster hierarchy from level 0. UV is a planar projection from above in metres (rock materials map
+triplanar).
+
+**Moss, lichen, burial** (`RockCover`, per instance): the vertex colour (the wind format's `COLOR`) is a linear tint of
+the material's albedo, which metallic-roughness multiplies its base colour by: weathered stone 0.86, fresh fractures 1,
+beds a few percent apart, then **moss** on the top and on the side that faces north once the rock is turned by its
+`yaw` (damp, shaded), up from the ground in a band, in patches; **lichen** in round blotches on lit faces, pale grey
+and some orange (Xanthoria) on tops; a **soil stain** at the ground. `buried` sinks it (a share of its height under
+the ground: a wider contact, a lower top). Rocks do not sway: their scene mesh is `SceneMeshes.TINTED` (normal,
+tangent, UV0, colour).
+
+Through the asset manager a `.rock` recipe takes the cover and a size as options:
+
+```
+# game://rocks/talus-block.rock
+generator = rock
+preset = block                 # boulder block slab scree erratic cluster
+seed = 7
+moss = 0.6                     # 0 to 1
+lichen = 0.3                   # 0 to 1
+yaw = 90                       # degrees: the turn it is placed with (the side then facing north gets the moss)
+burial = 0.25                  # 0 to 1 of its height under the ground (else the preset's)
+size = 1.6                     # metres (else the preset's)
+material.rock = game://materials/limestone.material
+material.fresh = game://materials/limestone-fresh.material   # optional: the rock's material by default
+```
+
+### Rocks in the ecology: talus, rockfall, streams, clearance piles, erratics
+
+`RockField` (in `common-procedural-ecology`, package `ecology.rocks`) places rocks where the ecology's terrain puts
+them, streams them in tiles like the plants, and keeps the plants off them:
+
+```java
+Ecology plain = new Ecology(terrain, EcologyParameters.ALPS.withSeed(7), AlpineSpecies.ALL);
+RockField rocks = new RockField(plain, RockFieldParameters.DEFAULTS);   // or RockSettings.parameters(settings)
+Ecology ecology = plain.avoiding(rocks);           // the same conditions and analysis; no plant stands on a rock
+RockTile tile = rocks.tile(3, -2);                 // or rocks.region(x0, z0, width, depth)
+RockInstances here = tile.instances();             // x, y, z, rotation (qx, qy, qz, qw), scale, kind, variant
+float[] grass = rocks.footprint(x0, z0, 0.5, 1536, 1536);  // 1 under the rocks: the grass' ground map
+Map<Integer, AssetRef<ModelData>> models = RockAssets.models(procedural, here, "game://materials/limestone.material", "");
+```
+
+| Kind | Where | Rocks |
+|---|---|---|
+| `TALUS` | below a cliff, on ground from 24 degrees to the angle of repose (42) | scree, blocks and slabs, sorted by size downslope, fresh near the apex |
+| `ROCKFALL` | past the talus, on gentler ground, as far as the shadow angle | big blocks and slabs, sparse, sunk |
+| `STREAM` | within a few metres of streams (wider with the catchment), not in open water | rounded mossy boulders |
+| `CLEARANCE` | at the meadows' edges (land kept open), on gentle slopes | clearance piles |
+| `ERRATIC` | anywhere gentle, on soil | lone erratics, lichened |
+
+- **Cliffs above:** from every field sample (4 m) the steepest way up is climbed over the terrain's heights (8 m);
+  where it meets ground steeper than 50 degrees is a cliff's foot, where it eases off its top. A cliff at least 15 m
+  high sheds rocks as far as the line from its top falls to the **shadow angle**, 27.5 degrees (Evans and Hungr
+  1993). A sample's place in the deposit, `t`, is 0 at the foot and 1 at the run-out's end, by the tangent of the line
+  to the top.
+- **Size sorting** (fall sorting: big blocks roll further; Kirkby and Statham 1975, Statham 1976): a rock's mean size
+  is its kind's smallest plus `t^sorting` of the way to its largest, each rock spread about it log-normally. On the
+  test's wall the talus' mean size grows from 0.56 m below the cliff to 1.7 m at its toe, the run-out's blocks 2 to
+  3 m.
+- **Placement** as the plants': a jittered candidate per world cell of each kind (talus 2 m, rockfall 6, streams
+  3, piles 30, erratics 40), kept by its kind's density there, then Matern's type II thinning (a rock falls when a
+  bigger one lies within their reaches added, times the packing 0.85). Every rock depends only on candidates within a
+  halo, so tiles stream in any order and match at their seams (tested).
+- **Resting:** a rock leans with the ground's normal (`tilt` 0.85) and is lowered until no point of its contact
+  outline (48 points of its model's section at the ground) lies above the terrain: it touches at its lowest point
+  and is sunk elsewhere (tested against the model's every contact vertex: none above the ground by more than 1 % of its size, the skirt below the ground 5 %).
+- **Cover from the site:** moss with moisture (Ellenberg 4.5 to 7.5), shade (less with sunshine) and the riparian
+  band; lichen with exposure and sunshine; both with age (talus near the apex fresh, erratics oldest).
+- **Models:** rocks share a field's `variants()` (a preset, one of 4 seeds, one of 4 headings, 3 moss and 3 lichen
+  levels, 2 depths), each generated once (`RockAssets.recipe(variant, ...)` is its recipe, byte-identical to the
+  direct API); an instance's rotation includes its variant's heading, so the moss faces north where it lies. Over 1 km2
+  round the Lauterbrunnen talus 11,262 rocks used 336 variants.
+- **Plants keep off** (`Ecology.avoiding(Obstacles)`, the ecology's generic hook): a plant candidate whose stem with
+  30 % of its crown radius lies on a rock's contact ellipse is taken out before thinning, so its neighbours may stand.
+- **Active talus:** the upper 40 % of a deposit on talus ground (`activeTalus`), where rocks still fall and the scree
+  moves, takes no tree or shrub (plants of a crown radius above `RockTile.WOODY`, 0.6 m); herbs and grass grow
+  there, and the forest takes the cone's lower part, as below Lauterbrunnen's walls (tested).
+- **Grass:** `RockTile.footprint` / `RockField.footprint` rasterize the contacts into a coverage map (1 under a rock,
+  soft over a texel) for effects-vegetation's `GroundMap`; `RockTile.cover(x, z, soft)` per point.
+
+**Settings** (`RockSettings`, engine settings, defaults `RockFieldParameters.DEFAULTS`): `procedural.rocks.cell`,
+`cliffSlope`, `cliffHeight`, `search`, `shadowAngle`, `talusSlope`, `reposeSlope`, `activeTalus`, `sorting`, `spread`, `tilt`,
+`packing`, `plantClearance`, `seeds`, `headings`, `coverLevels`, `depths`, and per kind (`talus`, `rockfall`,
+`stream`, `clearance`, `erratic`) `.density`, `.minSize`, `.maxSize`, `.cell`.
+
+**Cost:** over Lauterbrunnen's valley round the church (2 by 2 km, effects-terrain's surface), 35,174 rocks (32,018
+talus, 360 rockfall, 2,480 stream boulders, 160 piles, 156 erratics) in 14.7 s on 32 threads, the terrain analysis
+included (shared with the ecology); a variant's coarse model for its footprint is made once per field.
+
+**Pictures and film:** `RockPictures` (CPU, every preset bare and grown, `TRUESIM_PICTURES=true`), `RockMaps` (the
+test's wall), `LauterbrunnenRocks` (a map of the valley's rocks by kind), `RockFilm` in `preview` (`TRUESIM_FILMS=true`:
+the talus cone at the foot of Lauterbrunnen's western wall on effects-terrain's terrain, framed on the cone the
+field finds there, its upper part bare and the forest below; then every preset close, bare, mossy and lichened, in
+textured limestone; `TRUESIM_ROCK_STILLS=true` renders a frame per shot). What does not look real yet: the cliff is
+smooth (no rock texture or overhangs on the terrain), the scree between the instanced stones is the ground's colour,
+and the ecology puts a few pines on the wall's face.
 
 ## Fences
 
@@ -1131,6 +1255,15 @@ Rendering (the flowing-water material, the falls' sheets and jets, spray particl
 - **Plants** (`PlantTest`): bit-identical per seed and day; more than half of 24 plants in flower on their peak day,
   none in winter; foliage in its leaf or blade ramp; withering in autumn, pressed down by snow, grass spikes green in
   June and straw in August; no trunk weight, the pivot at the foot, the highest point swinging well; budgets.
+- **Rocks** (`RockTest`, `RockFieldTest`, `RockAssetsTest`): bit-identical per preset, cover and seed (on another
+  thread, after another rock); every level closed, outward, coarser, on the ground (cut 5 % below it), two submeshes,
+  tints in range; chips fresh and lighter, a boulder without; a slab's top flat; moss on the top and on the side facing
+  north for three headings; burial lowers the top and widens the contact; piles of seven. The field: talus between the
+  cliff's foot and the toe, none on the cliff, its mean size growing band by band downslope (and the run-out's
+  bigger), the apex fresher; every rock resting (its model's contact vertices at the ground, none above it, its top
+  out); tiles in either order equal to the region; plants on rocks without the rocks and none with them, the same
+  fields; the footprint map 1 under every rock; stream boulders by the stream, no talus without a cliff; a `.rock`
+  recipe with options equal to the direct API, a field's variants as models, the settings' defaults.
 - **Assets:** see above; a fruiting `.tree` with a `day` and a `.plant` load meshes byte-identical to the direct API's
   (levels and billboard), `#palette` the species' palette texels.
 
@@ -1221,8 +1354,8 @@ rowans, apple trees and dog roses from 50 m (`groupFromFiftyMetres`), in flower 
 
 Trees, plants, rocks, fences and buildings are in. Next, each an issue:
 
-- [#1](https://github.com/true-sim/common-procedural/issues/1) Rocks: erosion-like detail beyond noise, clusters and
-  scree fields
+- [#1](https://github.com/true-sim/common-procedural/issues/1) Rocks: fracture planes, bedding, chips, piles, moss
+  and lichen, and their placement (talus, rockfall, streams, clearance piles, erratics) are in
 - [#2](https://github.com/true-sim/common-procedural/issues/2) Plants, flowers and grass clumps: meadow flowers,
   grass clumps and dwarf shrubs are in; ferns, sedges and heather cushions to come
 - [#3](https://github.com/true-sim/common-procedural/issues/3) Alpine buildings: chalets, farmhouses, hay barns, the church, the

@@ -146,7 +146,7 @@ class ProceduralAssetsTest {
         assertThat(load(paths.ref(ProceduralAssets.RECIPE, "game://forest/spruce.tree")).seed()).isEqualTo(42);
         MeshData stone = load(paths.ref(RenderAssets.MESH, "game://forest/stone.rock#lod/1"));
         assertThat(stone.triangleCount()).isEqualTo(20 * 256);
-        assertThat(stone.format()).isEqualTo(SceneMeshes.STILL); // no wind: no vertex color to tint by
+        assertThat(stone.format()).isEqualTo(SceneMeshes.TINTED); // no wind; the vertex color a tint (moss, lichen)
         // generated once, for every load of the same recipe
         assertThat(generated.generations()).isEqualTo(2);
     }
@@ -324,7 +324,7 @@ class ProceduralAssetsTest {
         assertThatThrownBy(() -> Recipe.parse("generator = tree\npreset = rowan\nday = 400"))
             .isInstanceOf(IllegalArgumentException.class);
         assertThat(Recipe.parse("generator=rock\npreset=slab\nseed=-7\nmaterial.rock = a://b\n").materials())
-            .containsExactly("a://b");
+            .containsExactly("a://b", "a://b"); // fresh fractures: the rock's material unless named
         assertThat(Recipe.parse("generator = tree\npreset = larch\nseason = Autumn\nsnow = 0.25").snow())
             .isEqualTo(0.25);
         for (String bad : new String[] {"generator tree", "generator = tree", "preset = spruce",

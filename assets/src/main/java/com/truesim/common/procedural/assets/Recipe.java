@@ -49,6 +49,23 @@ import java.util.TreeMap;
  * material.timber = game://materials/larch-logs.material
  * </pre>
  *
+ * A rock ({@code .rock}, {@code generator = rock}, a {@code RockParams} preset) has the slots {@code rock} (its
+ * weathered surface) and {@code fresh} (fresh fractures; the rock's material unless named), and parameters for how it
+ * lies ({@code RockCover}) and its size ({@link #ROCK_PARAMETERS}, numbers):
+ *
+ * <pre>
+ * # rocks/talus-block.rock
+ * generator = rock
+ * preset = block            # boulder block slab scree erratic cluster
+ * seed = 7
+ * moss = 0.6                # 0 to 1: on its top and north side, up from the ground
+ * lichen = 0.3              # 0 to 1: blotches on lit faces
+ * yaw = 90                  # degrees: the turn it is placed with (the side then facing north gets the moss)
+ * burial = 0.25             # 0 to 1 of its height under the ground (else the preset's)
+ * size = 1.6                # metres, its mean radius (else the preset's)
+ * material.rock = game://materials/limestone.material
+ * </pre>
+ *
  * Equal recipes are one asset: a recipe is a value, so it keys generated assets and the generation cache.
  *
  * @param generator the generator's id: {@code tree}, {@code plant}, {@code rock} or {@code building}
@@ -60,8 +77,8 @@ import java.util.TreeMap;
  * @param materials the material paths of the submeshes, by slot (trees: bark, leaves, attachments; plants: foliage,
  *     flowers; rocks: rock; buildings: their {@code BuildingSlot}s); empty strings for none
  * @param day trees and plants: the day of the year, or NaN for the season's
- * @param parameters the generator's own parameters, by name (buildings: {@link #BUILDING_PARAMETERS}); empty for
- *     trees, plants and rocks
+ * @param parameters the generator's own parameters, by name (buildings: {@link #BUILDING_PARAMETERS}, rocks:
+ *     {@link #ROCK_PARAMETERS}); empty for trees and plants
  */
 public record Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials,
     double day, Map<String, String> parameters) {
@@ -69,7 +86,9 @@ public record Recipe(String generator, String preset, long seed, Season season, 
     /** The material slots of each generator, in submesh order. */
     static final List<String> TREE_SLOTS = List.of("bark", "leaves", "attachments");
     static final List<String> PLANT_SLOTS = List.of("foliage", "flowers");
-    static final List<String> ROCK_SLOTS = List.of("rock");
+    static final List<String> ROCK_SLOTS = List.of("rock", "fresh");
+    /** A rock recipe's own parameters, numbers: moss and lichen (0 to 1), yaw (degrees), burial (0 to 1), size (m). */
+    public static final Set<String> ROCK_PARAMETERS = Set.of("moss", "lichen", "yaw", "burial", "size");
     static final List<String> BUILDING_SLOTS = BuildingSlot.names();
     /** A building recipe's own parameters. */
     public static final Set<String> BUILDING_PARAMETERS = Set.of("width", "depth", "floors", "roof", "pitch",
@@ -92,6 +111,12 @@ public record Recipe(String generator, String preset, long seed, Season season, 
     public Recipe(String generator, String preset, long seed, Season season, double snow, List<String> materials,
         double day) {
         this(generator, preset, seed, season, snow, materials, day, Map.of());
+    }
+
+    /** Numeric parameter {@code name}, or {@code otherwise} when the recipe has none. */
+    public double number(String name, double otherwise) {
+        String value = parameters.get(name);
+        return value == null ? otherwise : Double.parseDouble(value);
     }
 
     /** The day of the year it is generated for: its day, else its season's. */
@@ -152,8 +177,17 @@ public record Recipe(String generator, String preset, long seed, Season season, 
         };
         Map<String, String> parameters = new TreeMap<>();
         for (String[] parameter : own) {
-            if (!"building".equals(generator) || !BUILDING_PARAMETERS.contains(parameter[0])) {
+            boolean rock = "rock".equals(generator) && ROCK_PARAMETERS.contains(parameter[0]);
+            if (!rock && (!"building".equals(generator) || !BUILDING_PARAMETERS.contains(parameter[0]))) {
                 throw new IllegalArgumentException("Line " + parameter[2] + ": unknown key '" + parameter[0] + "'");
+            }
+            if (rock) {
+                try {
+                    Double.parseDouble(parameter[1]);
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Line " + parameter[2] + ": '" + parameter[0]
+                        + "' is a number, not '" + parameter[1] + "'", e);
+                }
             }
             parameters.put(parameter[0], parameter[1]);
         }
@@ -165,6 +199,9 @@ public record Recipe(String generator, String preset, long seed, Season season, 
                 throw new IllegalArgumentException("A " + generator + " has no material slot '" + slot[0] + "'");
             }
             materials[index] = slot[1];
+        }
+        if ("rock".equals(generator) && materials[1].isEmpty()) {
+            materials[1] = materials[0]; // fresh fractures: the rock's material unless named
         }
         return new Recipe(generator, preset, seed, season, snow, List.of(materials), day, parameters);
     }

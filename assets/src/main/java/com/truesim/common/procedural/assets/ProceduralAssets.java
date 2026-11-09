@@ -276,7 +276,8 @@ public final class ProceduralAssets {
             throw new IllegalArgumentException("A " + recipe.generator() + " has meshes 0 to " + (all.size() - 1)
                 + ", not " + index);
         }
-        return SceneMeshes.build(all.get(index), generators.get(recipe.generator()).sways(), hierarchy);
+        ProceduralGenerator generator = generators.get(recipe.generator());
+        return SceneMeshes.build(all.get(index), generator.sways(), generator.tinted(), hierarchy);
     }
 
     @AllowAllocation("at load time")
