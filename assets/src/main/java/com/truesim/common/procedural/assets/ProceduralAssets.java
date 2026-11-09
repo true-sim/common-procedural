@@ -27,8 +27,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Procedural assets through the scene's asset system. Recipe files ({@code .tree}, {@code .plant}, {@code .rock}; see
- * {@link Recipe}) under any mount import as meshes and models that scenes reference like any other:
+ * Procedural assets through the scene's asset system. Recipe files ({@code .tree}, {@code .plant}, {@code .rock},
+ * {@code .building}; see {@link Recipe}) under any mount import as meshes and models that scenes reference like any
+ * other:
  *
  * <pre>{@code
  * PathAssets paths = new PathAssets(cache);
@@ -64,7 +65,7 @@ public final class ProceduralAssets {
     /** Recipes, read from recipe files. */
     public static final AssetType<Recipe> RECIPE = AssetType.of("procedural-recipe", Recipe.class, recipe -> 256);
     /** The file extensions of recipes. */
-    public static final List<String> EXTENSIONS = List.of("tree", "plant", "rock");
+    public static final List<String> EXTENSIONS = List.of("tree", "plant", "rock", "building");
 
     /** A generated mesh's key: the recipe, which of its meshes, and whether as a cluster hierarchy. */
     record MeshKey(Recipe recipe, int index, boolean hierarchy) {
@@ -92,6 +93,7 @@ public final class ProceduralAssets {
         generator(ProceduralGenerator.TREES);
         generator(ProceduralGenerator.PLANTS);
         generator(ProceduralGenerator.ROCKS);
+        generator(BuildingAssets.generator(com.truesim.common.procedural.building.BuildingOptions.DEFAULTS));
     }
 
     /** Uses {@code generator} for recipes naming its id, in place of any before. */
@@ -114,7 +116,15 @@ public final class ProceduralAssets {
         return detail;
     }
 
-    /** Registers the importers: recipes, meshes and models from {@code .tree} and {@code .rock} files. */
+    /** The generator of recipes naming {@code id}, or null. */
+    ProceduralGenerator generator(String id) {
+        return generators.get(id);
+    }
+
+    /**
+     * Registers the importers: recipes, meshes and models from recipe files; buildings' layouts
+     * ({@link BuildingAssets#LAYOUT}).
+     */
     @AllowAllocation("setting up")
     public ProceduralAssets install() {
         AssetLoader<Recipe> recipes = ProceduralAssets::readRecipe;
@@ -126,6 +136,7 @@ public final class ProceduralAssets {
                 .add(RenderAssets.MODEL, extension, modelImporter).add(RenderAssets.TEXTURE, extension,
                     textureImporter);
         }
+        BuildingAssets.install(paths, this);
         return this;
     }
 
@@ -204,7 +215,8 @@ public final class ProceduralAssets {
         boolean hierarchy = false;
         if (fragment == null || fragment.isEmpty()) {
             index = 0;
-        } else if (fragment.equals("billboard") && !recipe.generator().equals("rock")) {
+        } else if (fragment.equals("billboard") && generators.containsKey(recipe.generator())
+            && generators.get(recipe.generator()).billboard()) {
             index = meshes(recipe).size() - 1;
         } else if (fragment.startsWith("lod/")) {
             index = Integer.parseInt(fragment.substring("lod/".length()));
@@ -252,7 +264,8 @@ public final class ProceduralAssets {
     /** The generated level a model of {@code recipe} starts from, as {@code d} says. */
     private int level(Recipe recipe, ModelDetail d) throws Exception {
         int count = meshes(recipe).size();
-        int levels = "rock".equals(recipe.generator()) ? count : Math.max(1, count - 1); // but the billboard
+        ProceduralGenerator generator = generators.get(recipe.generator());
+        int levels = generator != null && !generator.billboard() ? count : Math.max(1, count - 1); // but a billboard
         return d.level(recipe.generator(), levels);
     }
 

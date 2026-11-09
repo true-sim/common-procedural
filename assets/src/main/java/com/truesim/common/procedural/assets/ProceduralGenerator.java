@@ -40,6 +40,11 @@ public interface ProceduralGenerator {
         return true;
     }
 
+    /** Whether its last mesh is a billboard (trees, plants) rather than a level of detail (rocks, buildings). */
+    default boolean billboard() {
+        return true;
+    }
+
     /**
      * The colors of {@code recipe}'s flowers, fruits and small parts (the {@code #palette} texture), or {@code null}
      * for a generator without.
@@ -144,6 +149,11 @@ public interface ProceduralGenerator {
 
         @Override
         public boolean sways() {
+            return false;
+        }
+
+        @Override
+        public boolean billboard() {
             return false;
         }
 
