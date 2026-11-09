@@ -11,6 +11,7 @@ recipe files.
 | `common-procedural` | `com.truesim.common.procedural` | the generators, the direct Java API: trees, flowers and fruits, plants, rocks, their meshes |
 | `common-procedural-ecology` | `com.truesim.common.procedural.ecology` | which plants grow where: conditions, species' envelopes, competition, streaming tiles of fields and instances |
 | `common-procedural-ecology-terrain` | `com.truesim.common.procedural.ecology.terrain` | the ecology over effects-terrain's surface and layers (optional) |
+| `common-procedural-water` | `com.truesim.common.procedural.water` | rivers, streams and waterfalls: channel networks from the flow or mapped watercourses, hydraulic geometry, surface meshes with the flow per vertex, carved beds and banks, bed stones, falls with sheets, jets, spray and mist |
 | `common-procedural-assets` | `com.truesim.common.procedural.assets` | recipe files (trees, plants, rocks, ecologies) imported as scene meshes, models, textures and recipes, generated in the background, cached |
 | `preview` (not published) | | pictures and films through the engine, with a minimal tree material reading the wind format |
 
@@ -588,6 +589,97 @@ show bare rock, and nothing grows below the trees but the colour.
   width, is underestimated far from its source; flat valley floors drain in braids (the data's levees and ditches).
 - Calcareous against siliceous ground (alpine aster and edelweiss on limestone, alpenrose on acid soils): no bedrock
   input yet.
+
+## Water: rivers, streams and waterfalls
+
+`common-procedural-water` (`com.truesim.common.procedural.water`) makes a region's water from its terrain (any
+`EcologyTerrain`; effects-terrain's surface through `TerrainEcology`), deterministically:
+
+```java
+WaterNetwork rivers = WaterNetwork.build(terrain, new WaterRegion(-8000, -3000, 6000, 13000),
+    WaterSettings.parameters(settings));                                 // or WaterParameters.DEFAULTS
+for (WaterNetwork.WaterChunk chunk : rivers.chunks()) {
+    ProceduralMesh surface = rivers.surface(chunk);                      // at (chunk.originX(), 0, chunk.originZ())
+    List<BedStone> stones = rivers.stones(chunk);                        // rock preset, seed, size, yaw
+}
+Waterfall staubbach = rivers.tallest();                                  // lip, foot, height, break-up, atomised
+ProceduralMesh sheet = rivers.fallMesh(staubbach.id());                  // at rivers.fallOrigin(id): sheet, jets
+Waterfall.Mist mist = staubbach.mist();                                  // for effects-atmosphere's FogVolume
+double ground = rivers.field().carve(x, z, terrain.height(x, z));        // the bed and banks cut in
+double grass = rivers.field().grass(x, z);                               // multiplies vegetation's density
+```
+
+- **Flow**: the terrain sampled every 10 m (each cell its lowest of 3 x 3 subsamples, so narrow channels in finer data
+  are found), mapped watercourses burned in, depressions filled by Priority-Flood (Barnes et al. 2014), single flow
+  directions (steepest descent), catchments.
+- **Channels** where the catchment passes 0.25 km2 or along a mapped watercourse, cut into reaches at confluences,
+  headwater stubs under 60 m dropped, Strahler orders. Each line is corner-cut, moved across the flow to the lowest
+  ground within 6 m (the thalweg), smoothed and evenly spaced (4 m); its **surface** is the monotone least-squares fit
+  to the ground along it (pool adjacent violators: pits half filled, bumps half cut), never rising downstream, also
+  across confluences.
+- **Hydraulic geometry**: discharge from the catchment (45 l/s per km2), width `4 Q^0.5` (Leopold and Maddock),
+  depth from Manning's equation for that width and the slope (`n` 0.045), speed from continuity, at most 8 m/s.
+- **Falls** where the surface drops 8 m or more over ground steeper than 1.2 (50 degrees): free falls (mean gradient
+  past 1.6) leave the lip at the brink's speed (critical flow), fall against quadratic drag toward 9 m/s once broken
+  up, held off the face where the data's cliff leans out; the sheet breaks up after Horeni's length `6 q^0.32` and
+  atomises, `1 - exp(-H / 120 m)` of the water reaching the foot as spray and mist. Each fall has its path, spray
+  sources (rates adding up to its discharge) and a mist ellipsoid. Steep drops that are not free are cascades: the
+  channel's own white-water surface.
+- **Stones** in the beds and on the banks: the median size from Shields' threshold for the bed-shaping flood
+  (3 x the mean depth), log-normal sizes, rock presets by size (`boulder`, `block`, `scree`), the emergent ones marked.
+- **Surfaces** in 512 m chunks, cross-sections of 4 quads; free falls left out (their sheets are separate meshes).
+  Vertices in `ProceduralVertex`'s layout with water's meanings (`WaterVertex`): TANGENT the flow's direction, UV0 the
+  speed and the place across, UV1 the depth (a sheet's thickness) and the fall over the break-up length, COLOR foam
+  (Froude number, emergent stones, plunge pools, breaking sheets), shore and atomisation.
+- **Beds and banks** (`WaterField`): a parabolic bed 1.5 times the mean depth deep, banks of half the width (at least
+  1.5 m) rising at 0.6, blended back into the ground; the ground is only lowered; grass absent from the water and the
+  bare gravel, growing back across the bank; `raster` gives the same as textures for terrain and vegetation maps.
+- **Real data** (`Watercourses`): where survey watercourses exist (swisstopo's swissTLM3D `TLM_FLIESSGEWAESSER`,
+  published for the whole country, not per tile like swissALTI3D: exported once to WKT lines; OpenStreetMap's
+  waterways), a `Watercourses.Source` gives them and the network follows them, with their widths and discharges where
+  known; without, the flow alone.
+- **Settings**: every tunable is an engine setting (`WaterSettings.ALL`, 41 of them under `water.`), their defaults
+  `WaterParameters.DEFAULTS`.
+
+**As assets** (`WaterAssets` in `common-procedural-assets`): `.water` recipes and `.courses` files load through the
+asset manager; the network is generated on the asset lane; surfaces and falls are generated meshes and models (placed
+at their chunk or lip, with the recipe's materials), the stones `ProceduralAssets`' rocks.
+
+```
+# game://water/lauterbrunnen.water
+region = -8000 -3000 6000 13000
+courses = game://water/lauterbrunnen.courses
+material.surface = game://water/river.material
+material.falls = game://water/falls.material
+material.jets = game://water/jets.material
+material.stones = game://rocks/stone.material
+```
+
+```java
+WaterAssets.install(paths);
+WaterAssets water = new WaterAssets(paths);
+AssetRef<WaterNetwork> rivers = water.network(cache.get(recipeRef), terrain, courses);   // in the background
+AssetRef<ModelData> surface = water.surface(network, recipe, chunk);
+AssetRef<ModelData> fall = water.fall(network, recipe, network.tallest().id());
+AssetRef<ModelData> stone = WaterAssets.stone(procedural, recipe, bedStone);
+```
+
+**Over Lauterbrunnen** (effects-terrain's cache, 14 x 16 km at 10 m, 6 s): 480 reaches, 300 km of channels, the
+Weisse Luetschine leaving at 7.1 m3/s, 11 m wide; 180 falls, the Staubbach Fall found where the stream off the Muerren
+terrace leaves the cliff: 311 m free fall (297 m in reality), 0.14 m3/s, breaking up after 2.8 m, 93 % reaching the
+foot as spray and mist. `TRUESIM_PICTURES=true ./gradlew :common-procedural-water:test --tests "*Lauterbrunnen*"`
+prints the network and renders the film (`-Ppictures=<dir>`).
+
+**Tested**: channels flow downhill (surfaces never rise, confluences join, receivers lie lower, every cell drains);
+width grows with discharge (downstream, and as `a Q^b` everywhere, continuity `Q = w d v`); the main river runs down
+the valley floor; a cliff makes a free fall (height, lip, break-up, atomisation, spray adding up to the discharge,
+the sheet off the face, meshes facing out) and a sloping drop a cascade; surfaces carry the flow (up-facing, flowing
+level or down, counter-clockwise); beds and banks are carved, never raised, grass grows back; stones sit in the beds,
+deterministic by seed; mapped watercourses are followed with their widths and discharges; recipes, watercourse files
+(WKT and blocks) and settings round-trip; through the real asset cache the same network and meshes as the direct API.
+
+Rendering (the flowing-water material, the falls' sheets and jets, spray particles, the mist) belongs in an
+`effects-*` repository: these meshes and records are its input.
 
 ## Tests
 
