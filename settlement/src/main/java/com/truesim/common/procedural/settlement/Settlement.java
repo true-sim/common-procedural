@@ -265,6 +265,16 @@ public final class Settlement {
      */
     public record Fence(FenceKind kind, double[] x, double[] y, double[] z) {
 
+        /** Its points as x, z pairs: the line the fence generator ({@code Fences.generate}) takes. */
+        public double[] line() {
+            double[] line = new double[2 * x.length];
+            for (int i = 0; i < x.length; i++) {
+                line[2 * i] = x[i];
+                line[2 * i + 1] = z[i];
+            }
+            return line;
+        }
+
         /** Its length along the ground plan, metres. */
         public double length() {
             double l = 0;

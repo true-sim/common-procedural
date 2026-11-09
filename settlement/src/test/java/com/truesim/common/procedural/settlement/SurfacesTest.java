@@ -185,6 +185,7 @@ class SurfacesTest {
         for (Settlement.Fence f : VILLAGE.fences()) {
             assertThat(f.length()).isGreaterThanOrEqualTo(VILLAGE.parameters().furniture().minFence());
             assertThat(f.x()).hasSameSizeAs(f.y()).hasSameSizeAs(f.z());
+            assertThat(f.line()).hasSize(2 * f.x().length).startsWith(f.x()[0], f.z()[0]);
             if (f.kind() == Settlement.FenceKind.PASTURE) {
                 for (int i = 0; i < f.x().length; i++) {
                     for (Road r : VILLAGE.roads()) {

@@ -416,7 +416,7 @@ along with +z its front, y up from the ground floor, the foundation reaching bel
 and `foundation` (the lowest). The showcase's `Buildings.Spec(kind, width, depth, ground, upper, pitch, seed)` maps
 onto it: CHALET for HOUSE and FARMHOUSE, CAFE for INN, CHURCH for CHURCH.
 
-A **`Fence`** is a polyline on the ground (x, y, z) of a kind (GARDEN round a plot's sides and back, PASTURE along a
+A **`Fence`** is a polyline on the ground (x, y, z; `line()` gives the x, z pairs `Fences.generate` takes) of a kind (GARDEN round a plot's sides and back, PASTURE along a
 track), posts and rails the fence generator's. A **`Prop`** is an anchor: a `PropKind`, a position on the graded
 ground, a turn and the building it belongs to.
 
