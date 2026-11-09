@@ -9,7 +9,7 @@ description = "Procedural water for true-sim: channel networks from the terrain'
 dependencies {
     api(project(":common-procedural-ecology")) // EcologyTerrain (any terrain), and common-procedural: meshes, Seeds
     api("com.truesim.engine:engine-settings:0.198.0") // WaterSettings: declared settings, no GPU
-    testImplementation("com.truesim.effects:effects-terrain-data:0.1.0") // Lauterbrunnen's surface, for pictures
+    testImplementation("com.truesim.effects:effects-terrain-data:0.5.0") // Lauterbrunnen's surface, for pictures
 }
 
 // Networks are built in the background (asset lanes, bake steps), never per frame: no allocation-free check.

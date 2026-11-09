@@ -16,9 +16,31 @@ import java.util.List;
  * @param placement how plants are placed
  * @param landUse how people keep the land open
  * @param sharpness how strongly the best-suited species dominate a layer (the exponent on suitability in the shares)
+ * @param woody where trees and shrubs can root: not on near-vertical faces nor where the soil is too thin
  */
 public record EcologyParameters(long seed, Climate climate, double tileSize, double cell, Analysis analysis,
-    Hydrology hydrology, Placement placement, LandUse landUse, double sharpness) {
+    Hydrology hydrology, Placement placement, LandUse landUse, double sharpness, Woody woody) {
+
+    /** Parameters with {@link Woody#DEFAULTS}. */
+    public EcologyParameters(long seed, Climate climate, double tileSize, double cell, Analysis analysis,
+        Hydrology hydrology, Placement placement, LandUse landUse, double sharpness) {
+        this(seed, climate, tileSize, cell, analysis, hydrology, placement, landUse, sharpness, Woody.DEFAULTS);
+    }
+
+    /**
+     * Where trees and shrubs can root. Ground steeper than {@code maxSlope} is a rock face: no tree stands there (on
+     * real cliffs only along ledges, finer than the terrain). The soil's depth is estimated from the ground's soil
+     * share and its slope ({@link Site#soilDepth}: about 1 m on gentle soil, thinning to nothing toward the
+     * steepest); trees need {@code minSoil}, shrubs half of it.
+     *
+     * @param maxSlope the steepest ground trees and shrubs stand on, degrees (they thin over the 8 degrees below)
+     * @param minSoil the least soil depth a tree needs, metres
+     */
+    public record Woody(double maxSlope, double minSoil) {
+
+        /** Trees up to 48 degrees, on 25 cm of soil and more. */
+        public static final Woody DEFAULTS = new Woody(48, 0.25);
+    }
 
     /**
      * The terrain analysis: the heightfield sampled every {@code cell} metres in blocks of {@code block} metres, each
@@ -137,7 +159,7 @@ public record EcologyParameters(long seed, Climate climate, double tileSize, dou
 
     /** The northern Alps' climate, 256 m tiles sampled every 4 m, natural vegetation. */
     public static final EcologyParameters ALPS = new EcologyParameters(1, Climate.NORTHERN_ALPS, 256, 4,
-        Analysis.DEFAULTS, Hydrology.DEFAULTS, Placement.DEFAULTS, LandUse.NONE, 3);
+        Analysis.DEFAULTS, Hydrology.DEFAULTS, Placement.DEFAULTS, LandUse.NONE, 3, Woody.DEFAULTS);
 
     public EcologyParameters {
         if (tileSize % cell != 0) {
@@ -147,30 +169,41 @@ public record EcologyParameters(long seed, Climate climate, double tileSize, dou
 
     public EcologyParameters withSeed(long value) {
         return new EcologyParameters(value, climate, tileSize, cell, analysis, hydrology, placement, landUse,
-            sharpness);
+            sharpness, woody);
     }
 
     public EcologyParameters withClimate(Climate value) {
-        return new EcologyParameters(seed, value, tileSize, cell, analysis, hydrology, placement, landUse, sharpness);
+        return new EcologyParameters(seed, value, tileSize, cell, analysis, hydrology, placement, landUse, sharpness,
+            woody);
     }
 
     public EcologyParameters withTiles(double size, double spacing) {
-        return new EcologyParameters(seed, climate, size, spacing, analysis, hydrology, placement, landUse, sharpness);
+        return new EcologyParameters(seed, climate, size, spacing, analysis, hydrology, placement, landUse, sharpness,
+            woody);
     }
 
     public EcologyParameters withAnalysis(Analysis value) {
-        return new EcologyParameters(seed, climate, tileSize, cell, value, hydrology, placement, landUse, sharpness);
+        return new EcologyParameters(seed, climate, tileSize, cell, value, hydrology, placement, landUse, sharpness,
+            woody);
     }
 
     public EcologyParameters withHydrology(Hydrology value) {
-        return new EcologyParameters(seed, climate, tileSize, cell, analysis, value, placement, landUse, sharpness);
+        return new EcologyParameters(seed, climate, tileSize, cell, analysis, value, placement, landUse, sharpness,
+            woody);
     }
 
     public EcologyParameters withPlacement(Placement value) {
-        return new EcologyParameters(seed, climate, tileSize, cell, analysis, hydrology, value, landUse, sharpness);
+        return new EcologyParameters(seed, climate, tileSize, cell, analysis, hydrology, value, landUse, sharpness,
+            woody);
+    }
+
+    public EcologyParameters withWoody(Woody value) {
+        return new EcologyParameters(seed, climate, tileSize, cell, analysis, hydrology, placement, landUse, sharpness,
+            value);
     }
 
     public EcologyParameters withLandUse(LandUse value) {
-        return new EcologyParameters(seed, climate, tileSize, cell, analysis, hydrology, placement, value, sharpness);
+        return new EcologyParameters(seed, climate, tileSize, cell, analysis, hydrology, placement, value, sharpness,
+            woody);
     }
 }

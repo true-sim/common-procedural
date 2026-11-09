@@ -7,7 +7,7 @@ description = "The procedural ecology over effects-terrain's surface: heights an
 
 dependencies {
     api(project(":common-procedural-ecology"))
-    api("com.truesim.effects:effects-terrain-data:0.1.0") // TerrainSurface, TerrainSite: CPU only, no GPU
+    api("com.truesim.effects:effects-terrain-data:0.5.0") // TerrainSurface, TerrainSite, TerrainModifier: CPU only
 }
 
 // The Lauterbrunnen benchmark and maps read effects-terrain's cache (-Ptruesim.terrain.cache=<dir>, else

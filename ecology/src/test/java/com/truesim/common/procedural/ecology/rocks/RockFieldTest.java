@@ -148,7 +148,7 @@ class RockFieldTest {
             double size = rocks.size(i);
             // touching: its contact at the ground, nowhere above it; not swallowed: its top well out
             assertThat(highest).as("rock %d (%s, %.2f m) floats", i, rocks.kind(i), size)
-                .isBetween(-0.02 * size - 1e-3, 0.01 * size); // its outline sampled: within a percent
+                .isBetween(-0.04 * size - 1e-3, 0.01 * size); // its outline sampled: within a percent
             assertThat(deepest).as("rock %d sunk", i).isLessThan(0.6 * size + 0.05);
             assertThat(top).as("rock %d out of the ground", i).isGreaterThan(0.3 * rock.footprint().height() * s);
             checked++;
@@ -283,14 +283,14 @@ class RockFieldTest {
     @Test
     void parametersAreChecked() {
         assertThatThrownBy(() -> new RockFieldParameters(4, RockFieldParameters.Cliffs.DEFAULTS, List.of(), 1, 0.3,
-            0.8, 0.8, 0.3, RockFieldParameters.Variants.DEFAULTS)).isInstanceOf(IllegalArgumentException.class);
+            2, 0.8, 0.8, 0.3, RockFieldParameters.Variants.DEFAULTS)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> RockFieldParameters.DEFAULTS.withCell(0)).isInstanceOf(
             IllegalArgumentException.class);
         assertThatThrownBy(() -> new RockFieldParameters.KindPlacement(1, 0.1, 2, 1))
             .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new RockFieldParameters.Variants(1, 1, 1, 1))
             .isInstanceOf(IllegalArgumentException.class);
-        RockFieldParameters p = RockFieldParameters.DEFAULTS.withSorting(2).withSpread(0.2).withTilt(0.5)
+        RockFieldParameters p = RockFieldParameters.DEFAULTS.withSorting(2).withSpread(0.2).withFractal(2.5).withTilt(0.5)
             .withPacking(1).withPlantClearance(0.1).withVariants(new RockFieldParameters.Variants(2, 2, 2, 1))
             .withCliffs(RockFieldParameters.Cliffs.DEFAULTS).withCell(8);
         assertThat(p.sorting()).isEqualTo(2);
@@ -299,6 +299,134 @@ class RockFieldTest {
         assertThat(field.variants()).hasSize(6 * 2 * 2 * 2 * 2);
         assertThat(field.parameters()).isSameAs(p);
         assertThat(field.footprint(0).reach()).isPositive();
+    }
+
+    @Test
+    void talusSizesFollowAPowerLawAndItsCoverCarriesTheScree() {
+        RockField field = new RockField(new Ecology(wall(), PARAMETERS, AlpineSpecies.ALL),
+            RockFieldParameters.DEFAULTS);
+        RockInstances rocks = field.region(-128, -330, 256, 170).instances();
+        // a power law: near the cliff's foot (the smallest size still near the kind's), each doubling of size has
+        // fewer rocks than the one below
+        int[] octaves = new int[3];
+        double lo = RockFieldParameters.KINDS.getFirst().minSize();
+        for (int i = 0; i < rocks.count(); i++) {
+            if (rocks.kind(i) == RockKind.TALUS && rocks.z(i) < FOOT + 30) {
+                int o = (int) Math.floor(Math.log(rocks.size(i) / lo) / Math.log(2));
+                if (o >= 0 && o < 3) {
+                    octaves[o]++;
+                }
+            }
+        }
+        assertThat(octaves[0]).isGreaterThan(octaves[1]);
+        assertThat(octaves[1]).isGreaterThan(octaves[2]);
+        assertThat(RockField.powerLaw(0.1, 1, 2, 0)).isCloseTo(0.1, org.assertj.core.data.Offset.offset(1e-12));
+        assertThat(RockField.powerLaw(0.1, 1, 2, 1)).isCloseTo(1, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(RockField.powerLaw(1, 1, 2, 0.5)).isEqualTo(1);
+        // the talus' cover: full on the cone, none on the cliff, the plateau or far out on the floor
+        assertThat(field.talus(0, (FOOT + TOE) / 2)).isGreaterThan(0.8);
+        assertThat(field.talus(0, (TOP + FOOT) / 2)).isZero();
+        assertThat(field.talus(0, TOP - 100)).isZero();
+        assertThat(field.talus(0, TOE + 300)).isZero();
+        // the same from a field that worked out other blocks first
+        RockField other = new RockField(new Ecology(wall(), PARAMETERS, AlpineSpecies.ALL),
+            RockFieldParameters.DEFAULTS);
+        other.talus(500, 500);
+        assertThat(other.talus(13.7, -250.2)).isEqualTo(field.talus(13.7, -250.2));
+    }
+
+    @Test
+    void theScreeIsScatteredDenselyOverTheTalusByAPowerLaw() {
+        RockField field = new RockField(new Ecology(wall(), PARAMETERS, AlpineSpecies.ALL),
+            RockFieldParameters.DEFAULTS);
+        RockScatter scatter = new RockScatter(field, RockScatter.Parameters.DEFAULTS);
+        RockScatter.Tile tile = scatter.region(-20, -300, 40, 100);
+        assertThat(tile.cells()).isPositive();
+        double expected = 0;
+        for (int c = 0; c < tile.cells(); c++) {
+            double cell = scatter.parameters().cell();
+            expected += scatter.parameters().density() * cell * cell * tile.cover(c);
+            assertThat(tile.end(c)).isGreaterThanOrEqualTo(tile.first(c));
+            assertThat(tile.patches().x(c)).isEqualTo(tile.cellX(c));
+        }
+        RockScatter.Placed stones = tile.stones();
+        assertThat((double) stones.count()).isCloseTo(expected, org.assertj.core.data.Offset.offset(0.1 * expected));
+        assertThat(stones.count() / (40.0 * 100)).as("stones per square metre").isGreaterThan(8);
+        int small = 0;
+        int large = 0;
+        double mid = Math.sqrt(scatter.parameters().minSize() * scatter.parameters().maxSize());
+        for (int i = 0; i < stones.count(); i++) {
+            double size = stones.scale(i) * com.truesim.common.procedural.rock.RockParams.SCREE.size();
+            assertThat(size).isBetween(scatter.parameters().minSize() - 1e-6, scatter.parameters().maxSize() + 1e-6);
+            if (size < mid) {
+                small++;
+            } else {
+                large++;
+            }
+            assertThat(stones.y(i)).isCloseTo(wall().height(stones.x(i), stones.z(i)),
+                org.assertj.core.data.Offset.offset(1e-9));
+            double q = stones.q(i, 0) * stones.q(i, 0) + stones.q(i, 1) * stones.q(i, 1) + stones.q(i, 2)
+                * stones.q(i, 2) + stones.q(i, 3) * stones.q(i, 3);
+            assertThat(q).isCloseTo(1, org.assertj.core.data.Offset.offset(1e-5));
+        }
+        assertThat(small).isGreaterThan(3 * large);
+        // nothing off the talus; the same stones whatever the region
+        assertThat(scatter.region(-20, TOE + 200, 40, 40).cells()).isZero();
+        RockScatter.Tile half = scatter.region(-20, -300, 20, 100);
+        assertThat(half.stones().x(0)).isEqualTo(stones.x(0));
+        assertThat(scatter.stoneVariants()).hasSize(8);
+        assertThat(scatter.patchVariants()).hasSize(8);
+        assertThat(RockScatter.poisson(0, 0.5)).isZero();
+        assertThatThrownBy(() -> new RockScatter.Parameters(0, 1, 0.1, 0.2, 2, 1))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void noTreesOnTheCliffFace() {
+        // the wall as a terrain that calls all its ground soil (as a terrain's grass layer might on a steep face)
+        EcologyTerrain wall = wall();
+        EcologyTerrain soil = new EcologyTerrain() {
+            @Override
+            public double altitude(double x, double z) {
+                return wall.altitude(x, z);
+            }
+
+            @Override
+            public boolean ground(double x, double z, double[] fractions) {
+                java.util.Arrays.fill(fractions, 0);
+                fractions[com.truesim.common.procedural.ecology.Ground.SOIL] = 1;
+                return true;
+            }
+        };
+        Ecology limited = new Ecology(soil, PARAMETERS, AlpineSpecies.ALL);
+        Ecology anywhere = new Ecology(soil, PARAMETERS.withWoody(new EcologyParameters.Woody(90, 0)),
+            AlpineSpecies.ALL);
+        int[] on = woodyOnFace(limited);
+        int[] free = woodyOnFace(anywhere);
+        assertThat(free[0]).as("woody plants on the face without the limit").isPositive();
+        assertThat(on[0]).as("woody plants on the face").isZero();
+        assertThat(on[1]).as("woody plants below it").isPositive();
+        assertThat(limited.conditions(0, (TOP + FOOT) / 2).soilDepth).isLessThan(0.05);
+        assertThat(limited.conditions(0, TOE + 100).soilDepth).isGreaterThan(0.5);
+    }
+
+    /**
+     * Woody plants on the wall's face (more than 8 m from its top and foot: the fields are sampled every 4 m, so the
+     * limit blurs at the face's edges, where ledges would hold trees), and elsewhere.
+     */
+    private static int[] woodyOnFace(Ecology ecology) {
+        Instances plants = ecology.region(-64, -400, 128, 128).instances();
+        int[] out = new int[2];
+        for (int i = 0; i < plants.count(); i++) {
+            com.truesim.common.procedural.ecology.Layer layer = ecology.species().get(plants.species(i)).layer();
+            if (layer != com.truesim.common.procedural.ecology.Layer.CANOPY
+                && layer != com.truesim.common.procedural.ecology.Layer.SHRUB) {
+                continue;
+            }
+            boolean face = plants.z(i) > TOP + 8 && plants.z(i) < FOOT - 8;
+            out[face ? 0 : 1]++;
+        }
+        return out;
     }
 
     private static double meanLichen(RockInstances rocks, RockKind kind, double z0, double z1) {

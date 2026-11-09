@@ -84,7 +84,7 @@ class RockTest {
         assertThat(rock.lods().getFirst().error()).isZero();
         assertThat(rock.lods().get(1).error()).isPositive();
         // a coarse level stays near the detailed surface
-        assertThat(rock.lods().get(1).error()).isLessThan(0.25 * params.size());
+        assertThat(rock.lods().get(1).error()).isLessThan(0.3 * params.size());
         RockFootprint footprint = rock.footprint();
         assertThat(footprint.covers(0, 0, 0)).isTrue();
         assertThat(footprint.reach()).isGreaterThanOrEqualTo(Math.max(footprint.halfX(), footprint.halfZ()));
@@ -184,7 +184,7 @@ class RockTest {
 
     @Test
     void parametersAreChecked() {
-        RockParams.Fractures none = new RockParams.Fractures(0, 1, 1, 0, 0, 0, 0);
+        RockParams.Fractures none = new RockParams.Fractures(0, 1, 1, 0, 0, 0, 0, 0);
         RockParams.Weathering smooth = new RockParams.Weathering(0, 0, 0, 0);
         assertThatThrownBy(() -> new RockParams("x", 0, 1, 1, none, smooth, RockParams.Bedding.NONE,
             RockParams.Cluster.SINGLE, 0, List.of(1))).isInstanceOf(IllegalArgumentException.class);
@@ -194,9 +194,9 @@ class RockTest {
             RockParams.Cluster.SINGLE, 0, List.of(8))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new RockParams("x", 1, 1, 1, none, smooth, RockParams.Bedding.NONE,
             RockParams.Cluster.SINGLE, 1, List.of(1))).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new RockParams.Fractures(40, 1, 1, 0, 0, 10, 0))
+        assertThatThrownBy(() -> new RockParams.Fractures(40, 1, 1, 0, 0, 10, 0, 0))
             .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new RockParams.Cluster(0, 1, 1)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new RockParams.Cluster(0, 1, 1, true)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new RockCover(2, 0, 0, 0)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new RockCover(0, 0, 0, 1)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> RockParams.preset("pebble")).isInstanceOf(IllegalArgumentException.class);

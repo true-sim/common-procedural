@@ -272,6 +272,9 @@ public final class Ecology {
             g[Ground.SCREE] = rest * (1 - rock) * scree;
             g[Ground.SOIL] = rest * (1 - rock) * (1 - scree);
         }
+        // soil depth: thinning with the slope and the ground's rock and scree
+        EcologyParameters.Woody woody = parameters.woody();
+        site.soilDepth = g[Ground.SOIL] * (1 - Range.smoothstep(15, woody.maxSlope() + 4, site.slope));
         // open water: rivers by their catchment, lakes in filled hollows
         double water = 0;
         if (site.riverArea >= hy.riverArea()) {
@@ -388,6 +391,13 @@ public final class Ecology {
                     double light = (1 - 0.97 * Maths.pow(canopy, 0.4))
                         * (layer == Layer.SHRUB ? 1 : 1 - 0.7 * shrubs);
                     v *= Range.smoothstep(0.4 * need[s], 1.2 * need[s], light);
+                }
+                if (layer == Layer.CANOPY || layer == Layer.SHRUB) {
+                    // not on rock faces, nor on soil too thin to root in (shrubs on half of a tree's)
+                    EcologyParameters.Woody woody = parameters.woody();
+                    double need = layer == Layer.CANOPY ? woody.minSoil() : 0.5 * woody.minSoil();
+                    v *= (1 - Range.smoothstep(woody.maxSlope() - 8, woody.maxSlope(), site.slope))
+                        * Range.smoothstep(0.5 * need, need, site.soilDepth);
                 }
                 double weight = sp.habit().weight() * (1 + 2 * Math.max(0, sp.envelope().riparian()) * site.riparian);
                 if (site.meadow > 0 && (layer == Layer.CANOPY || layer == Layer.SHRUB)) {
