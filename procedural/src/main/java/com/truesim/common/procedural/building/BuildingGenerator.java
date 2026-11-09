@@ -16,7 +16,7 @@ import java.util.List;
 public final class BuildingGenerator {
 
     /** Version of the generated output: changes whenever the same inputs would give different meshes. */
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     private final MeshWriter writer = new MeshWriter();
     private final List<int[]> parts = new ArrayList<>();

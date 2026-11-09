@@ -372,6 +372,49 @@ final class Kit {
         }
     }
 
+    /**
+     * Single-sheet flora (leaves, petals, stems: open, for two-sided materials) from {@code mesh}, its submesh 0 into
+     * the foliage slot and 1 into the flowers slot, placed by the frame: its x along {@code ax}, y along {@code up}, z
+     * along {@code out} (orthonormal), from {@code o}. Their texture coordinates are kept (a palette's). Not a closed
+     * part: their triangles belong to no part ({@code -1}).
+     */
+    void sheets(com.truesim.common.procedural.mesh.ProceduralMesh mesh, double[] o, double[] ax, double[] up,
+        double[] out) {
+        var position = mesh.vertices().attribute(com.truesim.common.procedural.mesh.ProceduralVertex.POSITION);
+        var normal = mesh.vertices().attribute(com.truesim.common.procedural.mesh.ProceduralVertex.NORMAL);
+        var tangent = mesh.vertices().attribute(com.truesim.common.procedural.mesh.ProceduralVertex.TANGENT);
+        var uv = mesh.vertices().attribute(com.truesim.common.procedural.mesh.ProceduralVertex.UV);
+        BuildingSlot[] slots = {BuildingSlot.FOLIAGE, BuildingSlot.FLOWERS};
+        int[] map = new int[mesh.vertexCount()];
+        for (int s = 0; s < Math.min(2, mesh.submeshCount()); s++) {
+            Buffer buffer = buffers[slots[s].ordinal()];
+            Arrays.fill(map, -1);
+            int[] indices = mesh.indices();
+            for (int i = mesh.submeshStart(s); i < mesh.submeshEnd(s); i += 3) {
+                int[] t = new int[3];
+                for (int c = 0; c < 3; c++) {
+                    int v = indices[i + c];
+                    if (map[v] < 0) {
+                        double[] pp = frame(o, ax, up, out, position.x(v), position.y(v), position.z(v));
+                        double[] nn = frame(null, ax, up, out, normal.x(v), normal.y(v), normal.z(v));
+                        double[] tt = frame(null, ax, up, out, tangent.x(v), tangent.y(v), tangent.z(v));
+                        map[v] = buffer.vertices;
+                        buffer.vertex(pp, nn, tt, uv.x(v), uv.y(v));
+                    }
+                    t[c] = map[v];
+                }
+                buffer.triangle(t[0], t[1], t[2], -1);
+            }
+        }
+    }
+
+    /** The point (or, without an origin, the direction) x, y, z of a frame. */
+    private static double[] frame(double[] o, double[] ax, double[] up, double[] out, double x, double y, double z) {
+        double[] p = {ax[0] * x + up[0] * y + out[0] * z, ax[1] * x + up[1] * y + out[1] * z,
+            ax[2] * x + up[2] * y + out[2] * z};
+        return o == null ? p : add(o, p);
+    }
+
     // ---------------------------------------------------------------- faces
 
     /** A planar quad (corners in order round it, either way), wound to face {@code out}. */

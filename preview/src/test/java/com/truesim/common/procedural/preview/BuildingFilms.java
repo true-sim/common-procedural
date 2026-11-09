@@ -118,6 +118,61 @@ class BuildingFilms {
         film(false);
     }
 
+    @Test
+    @EnabledIfEnvironmentVariable(named = "TRUESIM_GERANIUM_FILM", matches = "true")
+    void geraniums() throws IOException {
+        stills = false;
+        try (Stage stage = stage()) {
+            Map<BuildingSlot, Material> slots = slots(stage);
+            List<Building> hamlet = hamlet(options());
+            List<Placed> placed = place(stage, slots, hamlet, 0);
+            stage.shade();
+            Path out = ProceduralFilms.folder("geraniums");
+            int[] frame = {0};
+            Building chalet = placed.get(0).building();
+            Building inn = placed.get(4).building();
+            // along the chalet's balcony, close: the boxes on the rail, the geraniums trailing over them
+            closeUp(stage, out, frame, chalet, 150, 1.0, 1.6, 4.2, 4.0);
+            // the inn's front: both balconies and the window boxes, pulling back
+            for (int i = 0; i < 150; i++) {
+                double t = i / 149.0;
+                double e = t * t * (3 - 2 * t);
+                Footprint f = inn.spec().footprint();
+                double lx = -2 + 4 * e;
+                double lz = f.depth() / 2 + 4.5 + 7 * e;
+                double ly = 4.2 + 1.5 * e;
+                look(stage, inn, lx, ly, lz, lx * 0.5, 4.6, f.depth() / 2, 50 - 8 * e);
+                stage.frames(1, 1 / 30.0);
+                ProceduralFilms.write(stage.shot(), out, frame[0]++);
+            }
+            System.out.println("geranium film: " + frame[0] + " frames into " + out);
+        }
+    }
+
+    /** Along a building's front at {@code distance} from it, from the left to the right, at the balcony's rail. */
+    private static void closeUp(Stage stage, Path out, int[] frame, Building b, int frames, double from, double to,
+        double distance, double height) throws IOException {
+        Footprint f = b.spec().footprint();
+        for (int i = 0; i < frames; i++) {
+            double t = i / (double) (frames - 1);
+            double lx = -f.width() / 2 * from + f.width() * 0.5 * (to - from + 0.8) * t;
+            double lz = f.depth() / 2 + distance;
+            look(stage, b, lx, height, lz, lx + 1.6, height - 0.3, f.depth() / 2 + 1.0, 42);
+            stage.frames(1, 1 / 30.0);
+            ProceduralFilms.write(stage.shot(), out, frame[0]++);
+        }
+    }
+
+    /** The camera at a point of the building's frame looking at another. */
+    private static void look(Stage stage, Building b, double ex, double ey, double ez, double tx, double ty, double tz,
+        double fov) {
+        Footprint f = b.spec().footprint();
+        double c = Math.cos(f.yaw());
+        double s = Math.sin(f.yaw());
+        stage.look(f.x() + ex * c + ez * s, b.floor() + ey, f.z() - ex * s + ez * c, f.x() + tx * c + tz * s,
+            b.floor() + ty, f.z() - tx * s + tz * c, fov);
+    }
+
     /** Only the middle frame of every shot, for a look before the film. */
     private static boolean stills;
 
@@ -302,8 +357,12 @@ class BuildingFilms {
         m.put(BuildingSlot.DOOR, scan(stage, "weathered_planks", 1.1f, 0.95f, 0.85f, 1));
         m.put(BuildingSlot.METAL, plain(0.85f, 0.65f, 0.3f, 0.3f, 1));
         m.put(BuildingSlot.FIREWOOD, scan(stage, "bark_brown_02", 1, 1, 1, 1));
-        m.put(BuildingSlot.FOLIAGE, plain(0.05f, 0.16f, 0.03f, 0.7f, 0));
-        m.put(BuildingSlot.FLOWERS, plain(0.55f, 0.02f, 0.03f, 0.5f, 0));
+        // the geraniums: colored from their palette, leaves and petals single sheets
+        int palette = stage.texture(Looks.palette(com.truesim.common.procedural.building.Geraniums.palette()));
+        m.put(BuildingSlot.FOLIAGE, new Material(MetallicRoughnessParameters.DEFAULTS.withBaseColorTexture(palette)
+            .withRoughness(0.6f).withMetallic(0)).doubleSided(true));
+        m.put(BuildingSlot.FLOWERS, new Material(MetallicRoughnessParameters.DEFAULTS.withBaseColorTexture(palette)
+            .withRoughness(0.55f).withMetallic(0)).doubleSided(true));
         return m;
     }
 

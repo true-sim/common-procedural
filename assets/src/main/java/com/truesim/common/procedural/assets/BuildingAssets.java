@@ -133,6 +133,11 @@ public final class BuildingAssets {
         public List<ProceduralMesh> generate(Recipe recipe) {
             return Buildings.generate(spec(recipe), ground(recipe), options).lods();
         }
+
+        @Override
+        public com.truesim.common.procedural.flora.Palette palette(Recipe recipe) {
+            return com.truesim.common.procedural.building.Geraniums.palette(); // the flower boxes' foliage and flowers
+        }
     }
 
     /** The spec of a {@code .building} recipe: its kind (preset), seed and parameters, at the origin, unturned. */

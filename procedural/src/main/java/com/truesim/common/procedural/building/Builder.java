@@ -9,6 +9,7 @@ import com.truesim.common.procedural.Seeds;
 import com.truesim.common.procedural.building.Plan.Face;
 import com.truesim.common.procedural.building.Plan.Hole;
 import com.truesim.common.procedural.building.Plan.Segment;
+import com.truesim.common.procedural.mesh.ProceduralMesh;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,6 +41,9 @@ final class Builder {
     private final boolean rooms;
     private final Rng rng;
     private final BuildingSlot cover;
+    private final Geraniums geraniums = new Geraniums();
+    /** Flower boxes made so far: each box's seed, in the same order on every level. */
+    private int boxes;
 
     Builder(Plan plan, Kit kit, int level) {
         this.p = plan;
@@ -169,6 +173,9 @@ final class Builder {
             if (level == 2 && h.shutters()) {
                 shutters(face, x0, y0, x1, y1, timber);
             }
+            if (level == 2 && h.kind() == Opening.Kind.WINDOW && h.flowers()) {
+                flowerBox(face, x0 - 0.05, x1 + 0.05, y0 - 0.06, timber ? 0.075 : 0.06);
+            }
             return;
         }
         switch (h.kind()) {
@@ -284,33 +291,21 @@ final class Builder {
         double d0 = -proud - 0.25;
         double d1 = -proud - 0.005;
         panel(face, x0, top - 0.2, x1, top, d0, d1, BuildingSlot.TRIM);
-        flowers(face, x0, x1, top, (d0 + d1) / 2, level);
+        flowers(face, x0, x1, top - 0.03, (d0 + d1) / 2, false);
     }
 
-    /** Geraniums on a box's top: leaves in clumps, flowers above and hanging over the front. */
-    private void flowers(Face face, double x0, double x1, double top, double depth, int detail) {
-        if (detail > 1) {
+    /**
+     * The geraniums in a box whose top's middle runs from x0 to x1 along {@code face} at {@code top}, {@code depth} in
+     * from the face (negative: outside), from the flora at this level; each box its own seed, the same on every level.
+     */
+    private void flowers(Face face, double x0, double x1, double top, double depth, boolean tall) {
+        long seed = Seeds.derive(p.spec.seed(), 1000 + boxes++);
+        if (level >= 3) {
             return;
         }
-        int clumps = Math.max(2, (int) Math.round((x1 - x0) / (detail == 0 ? 0.17 : 0.4)));
-        for (int i = 0; i < clumps; i++) {
-            double x = x0 + (x1 - x0) * (i + 0.5) / clumps;
-            double[] c = p.point(face, x, top + 0.04, depth + (rng.nextDouble() - 0.5) * 0.06);
-            double r = detail == 0 ? 0.1 : 0.2;
-            kit.blob(c, r * (0.9 + 0.3 * rng.nextDouble()), 0.09, r * 0.9, BuildingSlot.FOLIAGE);
-            if (detail == 0) {
-                for (int k = 0; k < 2; k++) {
-                    double[] f = p.point(face, x + (rng.nextDouble() - 0.5) * 0.12, top + 0.12 + 0.05
-                        * rng.nextDouble(), depth + (rng.nextDouble() - 0.5) * 0.12);
-                    kit.blob(f, 0.045, 0.04, 0.045, BuildingSlot.FLOWERS);
-                }
-                if (rng.nextDouble() < 0.5) {
-                    double[] hang = p.point(face, x, top - 0.12 - 0.1 * rng.nextDouble(), depth - 0.14);
-                    kit.blob(hang, 0.06, 0.08, 0.05, BuildingSlot.FOLIAGE);
-                    kit.blob(Kit.add(hang, p(0, -0.06, 0)), 0.04, 0.035, 0.04, BuildingSlot.FLOWERS);
-                }
-            }
-        }
+        ProceduralMesh plants = geraniums.box(x1 - x0, 0.24, level, seed, tall);
+        double[] out = Kit.scale(Plan.inward(face), -1);
+        kit.sheets(plants, p.point(face, x0, top, depth), Plan.along(face), p(0, 1, 0), out);
     }
 
     private void door(Face face, Segment s, Hole h, boolean timber, double x0, double y0, double x1, double y1,
@@ -747,6 +742,7 @@ final class Builder {
                 kit.box(wood, x0, y - 0.01, front - 0.1, x1, y + rail, front);
                 kit.box(wood, x0, y - 0.01, z, x0 + 0.1, y + rail, front - 0.1);
                 kit.box(wood, x1 - 0.1, y - 0.01, z, x1, y + rail, front - 0.1);
+                railBoxes(x0, x1, y + rail, front);
                 continue;
             }
             // brackets
@@ -807,14 +803,18 @@ final class Builder {
                 kit.box(wood, x0 + 0.035, by0, z, x0 + 0.065, by1, front - 0.13);
                 kit.box(wood, x1 - 0.065, by0, z, x1 - 0.035, by1, front - 0.13);
             }
-            // flower boxes on the front rail
-            int boxes = p.w > 8 ? 3 : 2;
-            for (int i = 0; i < boxes; i++) {
-                double c = x0 + (x1 - x0) * (i + 0.5) / boxes;
-                double half = Math.min(0.6, (x1 - x0) / boxes / 2 - 0.15);
-                kit.box(wood, c - half, y + rail - 0.22, front, c + half, y + rail, front + 0.24);
-                flowers(Face.FRONT, c - half + p.hw, c + half + p.hw, y + rail, -(front + 0.12 - p.z1), level);
-            }
+            railBoxes(x0, x1, y + rail, front);
+        }
+    }
+
+    /** Flower boxes hung on a balcony's front rail (its top at {@code top}), geraniums in them. */
+    private void railBoxes(double x0, double x1, double top, double front) {
+        int count = p.w > 8 ? 3 : 2;
+        for (int i = 0; i < count; i++) {
+            double c = x0 + (x1 - x0) * (i + 0.5) / count;
+            double half = Math.min(0.6, (x1 - x0) / count / 2 - 0.15);
+            kit.box(BuildingSlot.TRIM, c - half, top - 0.22, front, c + half, top, front + 0.24);
+            flowers(Face.FRONT, c - half + p.hw, c + half + p.hw, top - 0.03, -(front + 0.12 - p.z1), true);
         }
     }
 

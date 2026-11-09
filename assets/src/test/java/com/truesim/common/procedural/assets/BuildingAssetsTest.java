@@ -133,6 +133,10 @@ class BuildingAssetsTest {
         Building barn = load(paths.ref(BuildingAssets.LAYOUT, "game://village/barn.building"));
         assertThat(barn.spec()).isEqualTo(BuildingSpec.of(BuildingKind.HAY_BARN, 3));
         assertThat(generated.generations()).isEqualTo(1);
+        // the flower boxes' palette, for the foliage and flowers slots
+        com.truesim.scene.render.TextureData palette = load(paths.ref(RenderAssets.TEXTURE,
+            "game://village/chalet.building#palette"));
+        assertThat(palette.width()).isEqualTo(com.truesim.common.procedural.building.Geraniums.palette().width());
     }
 
     @Test
