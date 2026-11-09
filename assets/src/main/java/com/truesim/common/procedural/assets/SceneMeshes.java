@@ -38,8 +38,16 @@ public final class SceneMeshes {
     }
 
     /** {@code mesh} as a flat scene mesh, with its wind data ({@link #FORMAT}) or without ({@link #STILL}). */
-    @AllowAllocation("building meshes, at load time")
     public static MeshData build(ProceduralMesh mesh, boolean wind) {
+        return build(mesh, wind, false);
+    }
+
+    /**
+     * {@code mesh} as a scene mesh with its wind data or without: a cluster hierarchy ({@code hierarchy}: the engine
+     * draws each meshlet at the detail its distance needs) or one flat level.
+     */
+    @AllowAllocation("building meshes, at load time")
+    public static MeshData build(ProceduralMesh mesh, boolean wind, boolean hierarchy) {
         int n = mesh.vertexCount();
         ElementBuffer vertices = mesh.vertices();
         Vec3Attribute normal = vertices.attribute(ProceduralVertex.NORMAL);
@@ -80,7 +88,7 @@ public final class SceneMeshes {
                 builder.submesh(mesh.submeshIndices(s));
             }
         }
-        return builder.buildFlat();
+        return hierarchy ? builder.buildHierarchy() : builder.buildFlat();
     }
 
     /** Whether submesh {@code s} of {@code mesh} has triangles (kept by {@link #build}). */

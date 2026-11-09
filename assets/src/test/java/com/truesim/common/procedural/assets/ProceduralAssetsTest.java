@@ -134,10 +134,10 @@ class ProceduralAssetsTest {
         assertThat(far.triangleCount()).isEqualTo(direct.lods().get(2).triangleCount());
         MeshData billboard = load(paths.ref(RenderAssets.MESH, "game://forest/spruce.tree#billboard"));
         assertThat(billboard.triangleCount()).isEqualTo(6);
-        // the model: one node with level 0 and the recipe's materials
+        // the model: one node with a cluster hierarchy from level 1 and the recipe's materials
         ModelData model = load(paths.ref(RenderAssets.MODEL, "game://forest/spruce.tree"));
         ModelData.Node node = model.nodes().getFirst();
-        assertThat(node.mesh()).isEqualTo(paths.ref(RenderAssets.MESH, "game://forest/spruce.tree#lod/0"));
+        assertThat(node.mesh()).isEqualTo(paths.ref(RenderAssets.MESH, "game://forest/spruce.tree#hierarchy/1"));
         assertThat(node.materials()).containsExactly(
             paths.ref(RenderAssets.MATERIAL, "game://materials/bark.material"),
             paths.ref(RenderAssets.MATERIAL, "game://materials/needles.material"),
@@ -213,7 +213,63 @@ class ProceduralAssetsTest {
     }
 
     @Test
+    void modelsAreClusterHierarchiesFromTheLevelTheDetailNames() throws Exception {
+        Recipe spruce = new Recipe("tree", "spruce", 42, Season.SUMMER, 0, List.of("game://materials/bark.material",
+            "game://materials/needles.material", "game://materials/cones.material"));
+        Tree direct = Trees.generate(TreeSpecies.SPRUCE, 42);
+        // by default: a tree's level 1 as a hierarchy, whose finest level is that level and coarser ones fall away
+        ModelData model = load(procedural.model(spruce));
+        MeshData hierarchy = load(model.nodes().getFirst().mesh());
+        assertThat(model.nodes().getFirst().mesh()).isEqualTo(procedural.mesh(spruce, 1, true));
+        assertThat(hierarchy.levels().size()).as("levels of the hierarchy").isGreaterThan(3);
+        assertThat(triangles(hierarchy, true)).as("level 1's triangles at full detail")
+            .isEqualTo(direct.lods().get(1).triangleCount());
+        // leaf and needle cards are apart: simplifying stops early (a spruce keeps some two thirds); impostors carry
+        // the far forest (effects-vegetation)
+        assertThat(triangles(hierarchy, false)).as("drawn from afar: fewer")
+            .isLessThan(direct.lods().get(1).triangleCount() * 3 / 4);
+        assertThat(model.nodes().getFirst().materials()).hasSize(hierarchy.materialSlots());
+        // from level 0, and flat: the detail is part of the model's key
+        ModelDetail fromZero = new ModelDetail(true, 0, 0);
+        assertThat(procedural.model(spruce, fromZero)).isNotEqualTo(procedural.model(spruce));
+        MeshData zero = load(load(procedural.model(spruce, fromZero)).nodes().getFirst().mesh());
+        assertThat(triangles(zero, true)).isEqualTo(direct.lods().getFirst().triangleCount());
+        procedural.detail(ModelDetail.FLAT);
+        assertThat(procedural.detail()).isEqualTo(ModelDetail.FLAT);
+        MeshData flat = load(load(procedural.model(spruce)).nodes().getFirst().mesh());
+        assertThat(flat.levels()).hasSize(1);
+        assertThat(flat.triangleCount()).isEqualTo(direct.lods().getFirst().triangleCount());
+        ModelData file = load(paths.ref(RenderAssets.MODEL, "game://forest/rowan.tree"));
+        assertThat(file.nodes().getFirst().mesh()).isEqualTo(paths.ref(RenderAssets.MESH,
+            "game://forest/rowan.tree#lod/0"));
+        // a level past the last is the last; the settings name the detail
+        assertThat(new ModelDetail(true, 9, 0).level("tree", 3)).isEqualTo(2);
+        assertThat(new ModelDetail(true, 1, 4).level("plant", 3)).isEqualTo(2);
+        com.truesim.engine.settings.EngineSettings settings = new com.truesim.engine.settings.EngineSettings();
+        assertThat(ModelDetail.of(settings)).isEqualTo(ModelDetail.DEFAULT);
+        settings.set(ProceduralSettings.HIERARCHY, false).set(ProceduralSettings.TREE_LEVEL, 0);
+        assertThat(ModelDetail.of(settings)).isEqualTo(ModelDetail.FLAT);
+        assertThat(ProceduralSettings.ALL).hasSize(3);
+        assertThatThrownBy(() -> new ModelDetail(true, -1, 0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * The triangles of {@code mesh} drawn at full detail ({@code full}: its meshlets of no error) or from as far as its
+     * detail goes (its roots: meshlets whose parent's error is infinite).
+     */
+    private static int triangles(MeshData mesh, boolean full) {
+        int count = 0;
+        double[] lod = new double[10];
+        for (int m = 0; m < mesh.meshletCount(); m++) {
+            mesh.meshletLod(m, lod);
+            count += (full ? lod[4] == 0 : Double.isInfinite(lod[9])) ? mesh.meshletTriangleCount(m) : 0;
+        }
+        return count;
+    }
+
+    @Test
     void recipesMadeInCodeAreGeneratedAssets() throws Exception {
+        procedural.detail(ModelDetail.FLAT); // level 0, to compare with the direct API
         List<String> materials = List.of("game://materials/larch-bark.material", "game://materials/larch.material",
             "game://materials/larch-cones.material");
         Recipe winter = new Recipe("tree", "larch", 4, Season.WINTER, 0.5, materials);
@@ -304,6 +360,7 @@ class ProceduralAssetsTest {
                 failures.add(error);
             }
         });
+        procedural.detail(ModelDetail.FLAT); // level 0, to compare with the direct API
         AssetRef<ModelData> before = live.model();
         assertThat(load(before)).isNotNull();
         assertThat(live.poll()).isFalse(); // unchanged

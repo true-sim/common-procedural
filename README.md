@@ -64,8 +64,9 @@ PathAssets paths = new PathAssets(cache);
 paths.mounts().add("game", PathSource.folder(gameDir));
 ProceduralAssets procedural = new ProceduralAssets(paths, new GenerationCache(cacheDir)).install();
 
-AssetRef<ModelData> spruce = paths.ref(RenderAssets.MODEL, "game://forest/spruce-a.tree"); // level 0 + materials
+AssetRef<ModelData> spruce = paths.ref(RenderAssets.MODEL, "game://forest/spruce-a.tree"); // a hierarchy + materials
 AssetRef<MeshData> far = paths.ref(RenderAssets.MESH, "game://forest/spruce-a.tree#lod/2");
+AssetRef<MeshData> clusters = paths.ref(RenderAssets.MESH, "game://forest/spruce-a.tree#hierarchy/0");
 AssetRef<MeshData> card = paths.ref(RenderAssets.MESH, "game://forest/spruce-a.tree#billboard");
 AssetRef<MeshData> stone = paths.ref(RenderAssets.MESH, "game://rocks/block.rock#lod/1");
 AssetRef<ModelData> inCode = procedural.model(new Recipe("tree", "larch", 7, Season.AUTUMN, 0, List.of("", "", "")));
@@ -74,9 +75,18 @@ AssetRef<MeshData> gentian = paths.ref(RenderAssets.MESH, "game://meadow/gentian
 ```
 
 - **In the background:** importers run on the asset cache's lane (the job system); loads finish at the frame
-  boundary like every asset. A recipe imports as a `MODEL` (one node: level 0 with its materials, or none if a slot
-  has none), a `MESH` (fragments `#lod/N` and `#billboard`), a `TEXTURE` (`#palette`, trees and plants) and a
-  `RECIPE`.
+  boundary like every asset. A recipe imports as a `MODEL` (one node: its mesh as the `ModelDetail` says, with the
+  materials of that level's submeshes, or none if a slot has none), a `MESH` (fragments `#lod/N` one flat level,
+  `#hierarchy/N` a cluster hierarchy built from level N, and `#billboard`), a `TEXTURE` (`#palette`, trees and plants)
+  and a `RECIPE`.
+- **Detail by distance:** a model's mesh is a cluster hierarchy (scene-meshbuild's `buildHierarchy`), so the engine
+  draws each meshlet at the detail its distance needs, from a tree's level 1 (some 25,000 triangles) and a plant's or
+  rock's level 0 by default. `procedural.detail(ModelDetail.of(settings))` takes it from the engine settings
+  (`ProceduralSettings`: `procedural.models.hierarchy`, `procedural.models.treeLevel`, `procedural.models.plantLevel`);
+  `ModelDetail.FLAT` is level 0 as one flat level, drawn whole at any distance (as before 0.4). Leaf and needle cards
+  are apart from one another, so simplifying them stops early: a spruce's hierarchy from level 1 (23,006 triangles)
+  still draws 15,472 from afar. A forest's far trees are effects-vegetation's octahedral impostors, baked from these
+  models through the engine (`PlantScatter`'s impostor distance).
 - **Generated once:** `GenerationCache` keeps generated meshes on disk keyed by SHA-256 of the generator's id and
   version and the recipe's generation key (generator, preset, seed, season, snow, day; not the materials). A recipe or a
   generator version that changes makes a new key: regeneration happens only on change, across runs; files are written

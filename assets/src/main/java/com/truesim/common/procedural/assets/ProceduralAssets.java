@@ -34,17 +34,19 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * PathAssets paths = new PathAssets(cache);
  * paths.mounts().add("game", PathSource.folder(gameDir));
  * new ProceduralAssets(paths, new GenerationCache(cacheDir)).install();
- * AssetRef<ModelData> spruce = paths.ref(RenderAssets.MODEL, "game://forest/spruce-a.tree");   // LOD 0, materials
+ * AssetRef<ModelData> spruce = paths.ref(RenderAssets.MODEL, "game://forest/spruce-a.tree");   // hierarchy, materials
  * AssetRef<MeshData> far = paths.ref(RenderAssets.MESH, "game://forest/spruce-a.tree#lod/2");
  * AssetRef<MeshData> card = paths.ref(RenderAssets.MESH, "game://forest/spruce-a.tree#billboard");
  * cache.acquire(spruce);                         // generated in the background, on the asset lane
  * }</pre>
  *
  * <ul>
- *   <li><b>Fragments</b> of a recipe's path: none or {@code #lod/0} the most detailed level, {@code #lod/N} level N,
- *       {@code #billboard} a tree's or plant's billboard; as a texture, {@code #palette} the colors of its flowers,
- *       fruits and small parts (the base color of the attachments, foliage and flowers slots). A model is one node
- *       with the recipe's level 0 and its materials.</li>
+ *   <li><b>Fragments</b> of a recipe's path: none or {@code #lod/0} the most detailed level, {@code #lod/N} level N
+ *       (one flat level each), {@code #hierarchy/N} a cluster hierarchy built from level N, {@code #billboard} a
+ *       tree's or plant's billboard; as a texture, {@code #palette} the colors of its flowers, fruits and small parts
+ *       (the base color of the attachments, foliage and flowers slots). A model is one node with the recipe's mesh
+ *       as its {@link ModelDetail} says (by default a cluster hierarchy from a tree's level 1, a plant's level 0: the
+ *       engine draws far trees with few meshlets) and the materials of that level's submeshes.</li>
  *   <li><b>In the background:</b> the cache runs importers on its asset lane (the job system), so generating never
  *       blocks the frame; loads finish at the frame boundary as all assets do.</li>
  *   <li><b>Generated once:</b> meshes go through a {@link GenerationCache} keyed by the recipe and the generator's
@@ -64,8 +66,12 @@ public final class ProceduralAssets {
     /** The file extensions of recipes. */
     public static final List<String> EXTENSIONS = List.of("tree", "plant", "rock");
 
-    /** A generated mesh's key: the recipe and which of its meshes. */
-    record MeshKey(Recipe recipe, int index) {
+    /** A generated mesh's key: the recipe, which of its meshes, and whether as a cluster hierarchy. */
+    record MeshKey(Recipe recipe, int index, boolean hierarchy) {
+    }
+
+    /** A generated model's key: the recipe, and how its detail is carried. */
+    record ModelKey(Recipe recipe, ModelDetail detail) {
     }
 
     private final PathAssets paths;
@@ -73,13 +79,14 @@ public final class ProceduralAssets {
     private final Map<String, ProceduralGenerator> generators = new ConcurrentHashMap<>();
     private final List<LiveRecipe> live = new CopyOnWriteArrayList<>();
     private final Generator<MeshKey, MeshData> meshes;
-    private final Generator<Recipe, ModelData> models;
+    private final Generator<ModelKey, ModelData> models;
+    private volatile ModelDetail detail = ModelDetail.DEFAULT;
 
     /** Procedural assets on {@code paths}, generating through {@code cache}. */
     @AllowAllocation("setting up")
     public ProceduralAssets(PathAssets paths, GenerationCache cache) {
-        this.meshes = (key, seed) -> sceneMesh(key.recipe(), key.index());
-        this.models = (recipe, seed) -> model(recipe, mesh(recipe, 0));
+        this.meshes = (key, seed) -> sceneMesh(key.recipe(), key.index(), key.hierarchy());
+        this.models = (key, seed) -> buildModel(key.recipe(), key.detail());
         this.paths = paths;
         this.cache = cache;
         generator(ProceduralGenerator.TREES);
@@ -91,6 +98,20 @@ public final class ProceduralAssets {
     public ProceduralAssets generator(ProceduralGenerator generator) {
         generators.put(generator.id(), generator);
         return this;
+    }
+
+    /**
+     * How models carry their detail from now on ({@link ModelDetail#of} reads it from the settings): references and
+     * recipe files imported after this call take it, models made before keep theirs.
+     */
+    public ProceduralAssets detail(ModelDetail newDetail) {
+        this.detail = java.util.Objects.requireNonNull(newDetail, "detail");
+        return this;
+    }
+
+    /** How models carry their detail. */
+    public ModelDetail detail() {
+        return detail;
     }
 
     /** Registers the importers: recipes, meshes and models from {@code .tree} and {@code .rock} files. */
@@ -117,16 +138,28 @@ public final class ProceduralAssets {
         return cache.get(generator, recipe);
     }
 
-    /** A generated reference to mesh {@code index} of {@code recipe} (its levels, then a tree's billboard). */
+    /** A generated reference to mesh {@code index} of {@code recipe} (its levels, then a tree's billboard), flat. */
     @AllowAllocation("references, at load time")
     public AssetRef<MeshData> mesh(Recipe recipe, int index) {
-        return AssetRef.generated(RenderAssets.MESH, meshes, new MeshKey(recipe, index), recipe.seed());
+        return mesh(recipe, index, false);
     }
 
-    /** A generated reference to the model of {@code recipe}: its level 0 with its materials. */
+    /** A generated reference to mesh {@code index} of {@code recipe}, as a cluster hierarchy or flat. */
+    @AllowAllocation("references, at load time")
+    public AssetRef<MeshData> mesh(Recipe recipe, int index, boolean hierarchy) {
+        return AssetRef.generated(RenderAssets.MESH, meshes, new MeshKey(recipe, index, hierarchy), recipe.seed());
+    }
+
+    /** A generated reference to the model of {@code recipe}, its detail as {@link #detail()} says, with its materials. */
     @AllowAllocation("references, at load time")
     public AssetRef<ModelData> model(Recipe recipe) {
-        return AssetRef.generated(RenderAssets.MODEL, models, recipe, recipe.seed());
+        return model(recipe, detail);
+    }
+
+    /** A generated reference to the model of {@code recipe}, its detail as {@code modelDetail} says. */
+    @AllowAllocation("references, at load time")
+    public AssetRef<ModelData> model(Recipe recipe, ModelDetail modelDetail) {
+        return AssetRef.generated(RenderAssets.MODEL, models, new ModelKey(recipe, modelDetail), recipe.seed());
     }
 
     /** Follows the recipe file at {@code path} for hot reload: read now, and again on each {@link #poll()}. */
@@ -168,16 +201,20 @@ public final class ProceduralAssets {
         Recipe recipe = readRecipe(input);
         String fragment = input.path().fragment();
         int index;
+        boolean hierarchy = false;
         if (fragment == null || fragment.isEmpty()) {
             index = 0;
         } else if (fragment.equals("billboard") && !recipe.generator().equals("rock")) {
             index = meshes(recipe).size() - 1;
         } else if (fragment.startsWith("lod/")) {
             index = Integer.parseInt(fragment.substring("lod/".length()));
+        } else if (fragment.startsWith("hierarchy/")) {
+            index = Integer.parseInt(fragment.substring("hierarchy/".length()));
+            hierarchy = true;
         } else {
             throw new IllegalArgumentException("No mesh '#" + fragment + "' in " + input.path());
         }
-        return sceneMesh(recipe, index);
+        return sceneMesh(recipe, index, hierarchy);
     }
 
     /** {@code #palette}: the colors of a tree's or plant's flowers, fruits and small parts, as an sRGB texture. */
@@ -206,27 +243,43 @@ public final class ProceduralAssets {
     @AllowAllocation("at load time")
     private ModelData importModel(AssetInput input) throws Exception {
         Recipe recipe = readRecipe(input);
-        return model(recipe, paths.ref(RenderAssets.MESH, input.path().file().fragment("lod/0")));
+        ModelDetail d = detail;
+        int level = level(recipe, d);
+        String fragment = (d.hierarchy() ? "hierarchy/" : "lod/") + level;
+        return model(recipe, level, paths.ref(RenderAssets.MESH, input.path().file().fragment(fragment)));
+    }
+
+    /** The generated level a model of {@code recipe} starts from, as {@code d} says. */
+    private int level(Recipe recipe, ModelDetail d) throws Exception {
+        int count = meshes(recipe).size();
+        int levels = "rock".equals(recipe.generator()) ? count : Math.max(1, count - 1); // but the billboard
+        return d.level(recipe.generator(), levels);
     }
 
     @AllowAllocation("at load time")
-    private MeshData sceneMesh(Recipe recipe, int index) throws Exception {
+    private MeshData sceneMesh(Recipe recipe, int index, boolean hierarchy) throws Exception {
         List<ProceduralMesh> all = meshes(recipe);
         if (index < 0 || index >= all.size()) {
             throw new IllegalArgumentException("A " + recipe.generator() + " has meshes 0 to " + (all.size() - 1)
                 + ", not " + index);
         }
-        return SceneMeshes.build(all.get(index), generators.get(recipe.generator()).sways());
+        return SceneMeshes.build(all.get(index), generators.get(recipe.generator()).sways(), hierarchy);
     }
 
-    /** A model of one node: {@code mesh} with the recipe's materials of the submeshes level 0 has. */
     @AllowAllocation("at load time")
-    private ModelData model(Recipe recipe, AssetRef<MeshData> mesh) throws Exception {
-        ProceduralMesh first = meshes(recipe).getFirst();
+    private ModelData buildModel(Recipe recipe, ModelDetail d) throws Exception {
+        int level = level(recipe, d);
+        return model(recipe, level, mesh(recipe, level, d.hierarchy()));
+    }
+
+    /** A model of one node: {@code mesh}, made from level {@code level}, with the recipe's materials of its submeshes. */
+    @AllowAllocation("at load time")
+    private ModelData model(Recipe recipe, int level, AssetRef<MeshData> mesh) throws Exception {
+        ProceduralMesh source = meshes(recipe).get(level);
         List<AssetRef<MaterialData>> materials = new ArrayList<>();
         boolean all = true;
-        for (int s = 0; s < first.submeshCount(); s++) {
-            if (SceneMeshes.kept(first, s)) {
+        for (int s = 0; s < source.submeshCount(); s++) {
+            if (SceneMeshes.kept(source, s)) {
                 String material = s < recipe.materials().size() ? recipe.materials().get(s) : "";
                 all &= !material.isEmpty();
                 if (!material.isEmpty()) {

@@ -46,7 +46,7 @@ if (preview) {
 val truesimRepos = listOf("build-logic", "common-math", "common-jobs", "scene") +
     (if (preview) listOf("common-state", "common-graph", "engine") else listOf())
 // Libraries only fetched, never included from a sibling (effects-terrain's own build includes the engine's)
-val fetchedRepos = listOf("effects-terrain")
+val fetchedRepos = listOf("effects-terrain") + (if (preview) listOf() else listOf("engine")) // engine-settings
 for (repo in truesimRepos) {
     providers.gradleProperty("truesim.$repo").orElse("../$repo").get()
         .takeIf { file(it).isDirectory }?.let { includeBuild(it) }
