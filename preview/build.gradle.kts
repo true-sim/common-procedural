@@ -13,6 +13,7 @@ dependencies {
     testImplementation(testFixtures("com.truesim.engine:engine-render:0.197.0")) // the headless renderer
     testImplementation("com.truesim.scene:scene-meshbuild:0.70.0")
     testImplementation(project(":common-procedural-ecology-terrain")) // the ecology over Lauterbrunnen's terrain
+    testImplementation(project(":common-procedural-settlement-terrain")) // a village through the terrain modifier hook
 }
 
 // The wind hook's and the tree material's records as Java

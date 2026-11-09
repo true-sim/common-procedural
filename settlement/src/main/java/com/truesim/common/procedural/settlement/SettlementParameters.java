@@ -145,20 +145,23 @@ public record SettlementParameters(Grid grid, Network network, RoadClass main, R
      * @param maxSideSlope the steepest ground the road crosses, degrees
      * @param count how many roads of the class are planned (the main road: one, through the square)
      * @param reach how far from the origin the class's roads lead, metres
+     * @param fillet the radius of the rounded corners where a road of the class joins another, metres (the kerbs'
+     *     radius in the core, a widened apron where tracks join)
      */
-    public record RoadClass(double width, double maxGrade, double maxSideSlope, int count, double reach) {
+    public record RoadClass(double width, double maxGrade, double maxSideSlope, int count, double reach,
+        double fillet) {
 
-        /** The main road: 6 m, 10 %, along the valley through the square, 460 m each way. */
-        public static final RoadClass MAIN = new RoadClass(6, 0.10, 24, 1, 460);
-        /** Village lanes: 4 m, 12 %, six of them 200 m out. */
-        public static final RoadClass LANE = new RoadClass(4, 0.12, 26, 6, 200);
-        /** Farm tracks: 3 m, 16 %, six of them to farmsteads 430 m out. */
-        public static final RoadClass TRACK = new RoadClass(3, 0.16, 30, 6, 430);
-        /** Footpaths: 1.4 m, 35 % (steps where steep), four of them up the slopes. */
-        public static final RoadClass FOOTPATH = new RoadClass(1.4, 0.35, 38, 4, 420);
+        /** The main road: 6 m, 10 %, along the valley through the square, 460 m each way; 4 m corners. */
+        public static final RoadClass MAIN = new RoadClass(6, 0.10, 24, 1, 460, 4);
+        /** Village lanes: 4 m, 12 %, six of them 200 m out; 4 m corners (the kerbs' radius in the core). */
+        public static final RoadClass LANE = new RoadClass(4, 0.12, 26, 6, 200, 4);
+        /** Farm tracks: 3 m, 16 %, six of them to farmsteads 430 m out; a 6 m apron where they join. */
+        public static final RoadClass TRACK = new RoadClass(3, 0.16, 30, 6, 430, 6);
+        /** Footpaths: 1.4 m, 35 % (steps where steep), four of them up the slopes; 1.5 m corners. */
+        public static final RoadClass FOOTPATH = new RoadClass(1.4, 0.35, 38, 4, 420, 1.5);
 
         public RoadClass {
-            if (width <= 0 || maxGrade <= 0 || count < 0) {
+            if (width <= 0 || maxGrade <= 0 || count < 0 || fillet < 0) {
                 throw new IllegalArgumentException("A road class needs a width and a grade");
             }
         }
@@ -262,21 +265,39 @@ public record SettlementParameters(Grid grid, Network network, RoadClass main, R
     }
 
     /**
-     * The road meshes and the terrain's grading.
+     * The road meshes and the terrain beside them. The roads' surface is one mesh over the network (merged at
+     * junctions, rounded by the classes' fillets), triangulated on a grid of {@code cell}, lying {@code lift} above
+     * the terrain inside its edge and on it at the edge; the terrain takes the road's height under it (from its outer
+     * strip inward sunk {@code sink} below, so it never shows through), keeps it level for {@code shoulder} beyond the
+     * edge, then falls or rises to the natural ground over at least {@code minRun}, at the batter's slope.
      *
-     * @param tile the road meshes' tile side, metres
+     * @param tile the road meshes' tile side, metres (a whole number of cells)
+     * @param cell the surface's triangulation grid, metres
      * @param camber the roads' crossfall from the crown to the edges (rise over run)
      * @param kerbWidth a kerb's width, metres
      * @param kerbHeight a kerb's height above the cobbles, metres
      * @param stepGrade the grade above which a footpath is stone steps
      * @param stepRise a step's rise, metres
      * @param batter the cuts' and fills' run per metre of rise
+     * @param minRun the shortest cut or fill beyond the shoulder, metres
+     * @param shoulder the level strip of terrain beside a road's edge, metres
+     * @param sink how far the terrain lies under the road's surface, metres
+     * @param verge the width of the worn verge and gravel scatter beside a road, metres
      * @param texture the surfaces' texture tile, metres
-     * @param lift how far the surfaces lie above the graded terrain, metres
+     * @param lift how far the surface lies above the terrain inside its edge, metres (none at the edge itself, where
+     *     the two meet)
      */
-    public record Surface(double tile, double camber, double kerbWidth, double kerbHeight, double stepGrade,
-        double stepRise, double batter, double texture, double lift) {
+    public record Surface(double tile, double cell, double camber, double kerbWidth, double kerbHeight,
+        double stepGrade, double stepRise, double batter, double minRun, double shoulder, double sink, double verge,
+        double texture, double lift) {
 
-        public static final Surface DEFAULTS = new Surface(64, 0.025, 0.3, 0.14, 0.2, 0.17, 1.5, 2, 0.03);
+        public static final Surface DEFAULTS = new Surface(64, 0.5, 0.025, 0.3, 0.14, 0.2, 0.17, 1.5, 2, 0.6, 0.15,
+            1.5, 2, 0.02);
+
+        public Surface {
+            if (cell <= 0 || Math.abs(tile / cell - Math.round(tile / cell)) > 1e-9) {
+                throw new IllegalArgumentException("A tile is a whole number of cells: " + tile + ", " + cell);
+            }
+        }
     }
 }

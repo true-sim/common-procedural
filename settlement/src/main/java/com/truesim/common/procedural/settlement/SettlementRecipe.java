@@ -1,5 +1,7 @@
 package com.truesim.common.procedural.settlement;
 
+import com.truesim.common.math.curve.Polyline2;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,7 +56,7 @@ public record SettlementRecipe(double originX, double originZ, long seed, double
             }
             int equals = line.indexOf('=');
             if (equals < 0) {
-                throw new IllegalArgumentException("Line " + number + " is not 'key = value': " + raw);
+                throw new IllegalArgumentException("Polyline2 " + number + " is not 'key = value': " + raw);
             }
             String key = line.substring(0, equals).strip();
             String value = line.substring(equals + 1).strip();
@@ -62,7 +64,7 @@ public record SettlementRecipe(double originX, double originZ, long seed, double
                 case "origin" -> {
                     String[] parts = value.split("\s+");
                     if (parts.length != 2) {
-                        throw new IllegalArgumentException("Line " + number + ": the origin is 'x z'");
+                        throw new IllegalArgumentException("Polyline2 " + number + ": the origin is 'x z'");
                     }
                     x = Double.parseDouble(parts[0]);
                     z = Double.parseDouble(parts[1]);
@@ -73,7 +75,7 @@ public record SettlementRecipe(double originX, double originZ, long seed, double
                     int slot = key.startsWith("material.") ? RoadMeshes.SLOT_NAMES.indexOf(
                         key.substring("material.".length())) : -1;
                     if (slot < 0) {
-                        throw new IllegalArgumentException("Line " + number + ": unknown key '" + key + "'");
+                        throw new IllegalArgumentException("Polyline2 " + number + ": unknown key '" + key + "'");
                     }
                     materials.set(slot, value);
                 }

@@ -1,13 +1,18 @@
 package com.truesim.common.procedural.settlement;
 
+import com.truesim.common.procedural.ecology.EcologyClearing;
+import com.truesim.common.procedural.ecology.Layer;
+
 /**
  * Where a settlement leaves the ground open, for the ecology's plants and the grass: two densities from 0 (nothing
  * grows) to 1 (as the ecology says), fading over a metre or two at their edges. Trees and shrubs keep off the roads,
  * the square and the buildings by a margin and off the plots (gardens and yards); grass keeps off what is paved or
  * built (the ground-cover mask: roads with their kerbs and steps, the square, footprints). A raster over the plan,
- * every {@link SettlementParameters.Grid#raster} metres; 1 outside it.
+ * every {@link SettlementParameters.Grid#raster} metres; 1 outside it. As the ecology's clearing
+ * ({@code ecology.withClearing(village.clearing())}): trees and shrubs where {@link #trees} keeps them, dwarf shrubs,
+ * herbs and grass where {@link #grass} does.
  */
-public final class Clearing {
+public final class Clearing implements EcologyClearing {
 
     private final double x0;
     private final double z0;
@@ -23,6 +28,11 @@ public final class Clearing {
         this.n = n;
         this.trees = trees;
         this.grass = grass;
+    }
+
+    @Override
+    public double keep(double x, double z, Layer layer) {
+        return layer == Layer.CANOPY || layer == Layer.SHRUB ? trees(x, z) : grass(x, z);
     }
 
     /** How much trees and shrubs may grow at ({@code x}, {@code z}), 0 to 1: the ecology's instances' keep. */

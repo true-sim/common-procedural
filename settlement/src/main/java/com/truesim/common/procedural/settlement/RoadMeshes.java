@@ -1,27 +1,43 @@
 package com.truesim.common.procedural.settlement;
 
+import com.truesim.common.math.geometry.Polygons;
+
+import com.truesim.common.math.Maths;
+
+import com.truesim.common.math.curve.Polyline2;
+
 import com.truesim.common.procedural.mesh.MeshWriter;
 import com.truesim.common.procedural.mesh.ProceduralMesh;
 import com.truesim.common.procedural.settlement.Settlement.Road;
-import com.truesim.common.procedural.settlement.Settlement.Square;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
- * A settlement's road surfaces as meshes, in world-aligned square tiles for streaming: each road's surface swept along
- * its graded centre line (its crown, a camber falling to both edges, a short skirt into the ground), the square's
- * cobbles on its plane, kerbs along the cobbled roads and round the square (open where roads meet them), and stone
- * steps where a footpath is steeper than {@link SettlementParameters.Surface#stepGrade}. The surfaces follow the same
- * profile as the {@link Grading}, so they lie on a terrain that takes it.
+ * A settlement's road network as meshes, watertight: one surface over every road, junction and the square, kerbs on
+ * its edge in the core, stone steps where footpaths are steep, in world-aligned square tiles for streaming.
  *
- * <p>Each tile's mesh is in its own frame: positions relative to the tile's ({@code x}, {@code y}, {@code z}), so
- * float positions and half-float texture coordinates stay precise. Submeshes are material slots, always all five:
- * {@link #COBBLES}, {@link #GRAVEL}, {@link #DIRT}, {@link #KERB}, {@link #STEPS} (empty ones have no triangles).
- * Texture coordinates are planar, a tile every {@link SettlementParameters.Surface#texture} metres: from above on
- * the surfaces and treads, along and up on kerbs' faces and risers.
+ * <p><b>The surface</b> is the paved region of the network's distance field ({@link RoadField}): merged at junctions
+ * (rounded by the classes' fillets: kerb radii in the core, aprons where tracks join), its height the roads' crowns
+ * and camber blended across junctions. It is triangulated by marching triangles over a world-aligned grid of
+ * {@link SettlementParameters.Surface#cell}: every cell split along one diagonal, each triangle clipped to the paved
+ * side. A vertex is a grid node or a crossing on a grid edge, computed from that edge alone (its nodes' field values,
+ * in a fixed order), so neighbouring cells and tiles make it bit for bit the same: no cracks, no T-junctions, no
+ * overlaps. Field values within a twentieth of a cell of zero are pushed off it, so crossings never fall on a node
+ * (no slivers).
+ *
+ * <p><b>Kerbs</b> stand on the surface's edge where it is cobbled: their inner foot is the surface's own edge, their
+ * face, top and outer face follow it round every rounded corner, out along the field's gradient; where the cobbles end
+ * (a road leaving the core) a kerb is closed by an end. <b>Steps</b> meet the surface where it is cut square across a
+ * footpath: their first and last risers stand on the surface's own edge vertices there.
+ *
+ * <p>The terrain meets the surface's edge: {@link Grading#height} is the surface's height there. Positions are
+ * relative to each tile's corner; submeshes are the five material slots, always present. Texture coordinates are
+ * planar: from above on the surface and treads, along and up on the kerbs' faces and the risers.
  */
 public final class RoadMeshes {
 
@@ -40,8 +56,14 @@ public final class RoadMeshes {
     /** The slots' names, as recipes' material keys name them. */
     public static final List<String> SLOT_NAMES = List.of("cobbles", "gravel", "dirt", "kerb", "steps");
 
-    /** How far a road's skirt reaches below its edge, metres. */
-    private static final double SKIRT = 0.3;
+    /** Over how many metres inside its edge the surface rises to its lift. */
+    private static final double LIFT_RAMP = 0.3;
+    /** How far below the ground a kerb's and a step's outer face reach, metres. */
+    private static final double FOOT = 0.25;
+    /** Field values nearer zero than this share of a cell are pushed off it. */
+    private static final double NUDGE = 0.05;
+    /** The offset of grid indices, keeping keys positive. */
+    private static final long OFFSET = 1L << 30;
 
     /**
      * A tile's mesh: tile ({@code i}, {@code j}) covers x from {@code i * tile}, z from {@code j * tile}; its mesh's
@@ -57,32 +79,31 @@ public final class RoadMeshes {
     public record Tile(int i, int j, double x, double y, double z, ProceduralMesh mesh) {
     }
 
-    /** Triangles collected for one tile, per slot: world positions, normals, tangents, texture coordinates. */
-    private static final class Batch {
+    /** A tile's geometry: vertices (world positions and attributes) and triangles per slot. */
+    private static final class Part {
         final int i;
         final int j;
         final double x0;
         final double z0;
-        final Part[] parts = new Part[SLOTS];
+        double[] v = new double[11 * 256];
+        int vertices;
+        final int[][] triangles = new int[SLOTS][];
+        final int[] counts = new int[SLOTS];
+        /** Surface vertices by grid key. */
+        final Map<Long, Integer> keyed = new HashMap<>();
+        /** The surface's edge, where cobbled: pairs of surface vertex keys, inside on the left going a to b. */
+        final List<long[]> edges = new ArrayList<>();
         double minY = Double.MAX_VALUE;
 
-        Batch(int i, int j, double tile) {
+        Part(int i, int j, double tile) {
             this.i = i;
             this.j = j;
             x0 = i * tile;
             z0 = j * tile;
             for (int s = 0; s < SLOTS; s++) {
-                parts[s] = new Part();
+                triangles[s] = new int[3 * 64];
             }
         }
-    }
-
-    /** One slot's vertices (11 doubles each: position, normal, tangent, uv) and triangles. */
-    private static final class Part {
-        double[] v = new double[11 * 64];
-        int vertices;
-        int[] t = new int[3 * 64];
-        int triangles;
 
         int vertex(double px, double py, double pz, double nx, double ny, double nz, double tx, double ty, double tz,
             double u, double w) {
@@ -101,78 +122,202 @@ public final class RoadMeshes {
             v[o + 8] = tz;
             v[o + 9] = u;
             v[o + 10] = w;
+            minY = Math.min(minY, py);
             return vertices++;
         }
 
-        void triangle(int a, int b, int c) {
-            if (3 * (triangles + 1) > t.length) {
-                t = Arrays.copyOf(t, t.length * 2);
+        void triangle(int slot, int a, int b, int c) {
+            int[] t = triangles[slot];
+            if (3 * (counts[slot] + 1) > t.length) {
+                triangles[slot] = t = Arrays.copyOf(t, t.length * 2);
             }
-            t[3 * triangles] = a;
-            t[3 * triangles + 1] = b;
-            t[3 * triangles + 2] = c;
-            triangles++;
+            t[3 * counts[slot]] = a;
+            t[3 * counts[slot] + 1] = b;
+            t[3 * counts[slot] + 2] = c;
+            counts[slot]++;
+        }
+
+        double x(int k) {
+            return v[11 * k];
+        }
+
+        double y(int k) {
+            return v[11 * k + 1];
+        }
+
+        double z(int k) {
+            return v[11 * k + 2];
         }
     }
 
     private final Settlement settlement;
     private final SettlementParameters.Surface surface;
+    private final RoadField field;
+    private final double cell;
+    private final int perTile;
     private final double tile;
-    private final Map<Long, Batch> batches = new TreeMap<>();
+    private final RoadField.Sample sample = new RoadField.Sample();
+    private final Map<Long, Part> parts = new TreeMap<>();
 
     private RoadMeshes(Settlement settlement) {
         this.settlement = settlement;
         this.surface = settlement.parameters().surface();
+        this.field = settlement.grading().field();
+        this.cell = surface.cell();
         this.tile = surface.tile();
+        this.perTile = (int) Math.round(tile / cell);
     }
 
     /** The road meshes of {@code settlement}, by tile, in row-major order of their tiles. */
     public static List<Tile> build(Settlement settlement) {
         RoadMeshes meshes = new RoadMeshes(settlement);
+        meshes.surface();
+        meshes.kerbs();
         for (Road r : settlement.roads()) {
-            meshes.road(r);
+            meshes.steps(r);
         }
-        meshes.square(settlement.square());
         return meshes.write();
     }
 
-    private List<Tile> write() {
-        List<Tile> tiles = new ArrayList<>();
-        MeshWriter writer = new MeshWriter();
-        for (Batch b : batches.values()) {
-            double y0 = Math.floor(b.minY);
-            writer.reset();
-            for (int s = 0; s < SLOTS; s++) {
-                if (s > 0) {
-                    writer.nextSubmesh();
+    // -------------------------------------------------------------------------------------------------- the surface
+
+    /** The cells the paved region may reach, by tile. */
+    private TreeMap<Long, TreeSet<Long>> cells() {
+        TreeMap<Long, TreeSet<Long>> byTile = new TreeMap<>();
+        for (Road r : settlement.roads()) {
+            double reach = r.width() / 2 + field.fillet(r.id()) + 2 * cell;
+            for (int i = 1; i < r.count(); i++) {
+                if (field.steep(r.id(), i - 1)) {
+                    continue;
                 }
-                Part part = b.parts[s];
-                int base = writer.vertexCount();
-                for (int k = 0; k < part.vertices; k++) {
-                    int o = 11 * k;
-                    writer.vertex(part.v[o] - b.x0, part.v[o + 1] - y0, part.v[o + 2] - b.z0, part.v[o + 3],
-                        part.v[o + 4], part.v[o + 5], part.v[o + 6], part.v[o + 7], part.v[o + 8], part.v[o + 9],
-                        part.v[o + 10]);
-                }
-                for (int k = 0; k < part.triangles; k++) {
-                    writer.triangle(base + part.t[3 * k], base + part.t[3 * k + 1], base + part.t[3 * k + 2]);
-                }
+                add(byTile, Math.min(r.x()[i - 1], r.x()[i]) - reach, Math.max(r.x()[i - 1], r.x()[i]) + reach,
+                    Math.min(r.z()[i - 1], r.z()[i]) - reach, Math.max(r.z()[i - 1], r.z()[i]) + reach);
             }
-            tiles.add(new Tile(b.i, b.j, b.x0, y0, b.z0, writer.build(0)));
         }
-        return tiles;
+        double[] c = settlement.square().corners();
+        double reach = settlement.parameters().lane().fillet() + 2 * cell;
+        add(byTile, Math.min(Math.min(c[0], c[2]), Math.min(c[4], c[6])) - reach,
+            Math.max(Math.max(c[0], c[2]), Math.max(c[4], c[6])) + reach,
+            Math.min(Math.min(c[1], c[3]), Math.min(c[5], c[7])) - reach,
+            Math.max(Math.max(c[1], c[3]), Math.max(c[5], c[7])) + reach);
+        return byTile;
     }
 
-    private Batch batch(double x, double z) {
-        int i = (int) Math.floor(x / tile);
-        int j = (int) Math.floor(z / tile);
-        long key = ((long) j << 32) ^ (i & 0xffffffffL);
-        return batches.computeIfAbsent(key, k -> new Batch(i, j, tile));
+    private void add(TreeMap<Long, TreeSet<Long>> byTile, double minX, double maxX, double minZ, double maxZ) {
+        int i0 = (int) Math.floor(minX / cell);
+        int i1 = (int) Math.floor(maxX / cell);
+        int j0 = (int) Math.floor(minZ / cell);
+        int j1 = (int) Math.floor(maxZ / cell);
+        for (int j = j0; j <= j1; j++) {
+            for (int i = i0; i <= i1; i++) {
+                long t = key(Math.floorDiv(i, perTile), Math.floorDiv(j, perTile));
+                byTile.computeIfAbsent(t, k -> new TreeSet<>()).add(key(i, j));
+            }
+        }
     }
 
-    // ---------------------------------------------------------------------------------------------------------- roads
+    private static long key(int i, int j) {
+        return (j + OFFSET) << 31 | (i + OFFSET);
+    }
+
+    private static int keyI(long key) {
+        return (int) ((key & ((1L << 31) - 1)) - OFFSET);
+    }
+
+    private static int keyJ(long key) {
+        return (int) ((key >>> 31) - OFFSET);
+    }
+
+    /** The paved field at grid node (i, j), pushed off zero. */
+    private double value(int i, int j, Map<Long, Double> cache) {
+        long k = key(i, j);
+        Double v = cache.get(k);
+        if (v == null) {
+            field.sample(i * cell, j * cell, sample);
+            double d = sample.paved;
+            double nudge = NUDGE * cell;
+            if (Math.abs(d) < nudge) {
+                d = d < 0 ? -nudge : nudge;
+            }
+            v = d;
+            cache.put(k, v);
+        }
+        return v;
+    }
+
+    private void surface() {
+        Map<Long, Double> cache = new HashMap<>();
+        for (Map.Entry<Long, TreeSet<Long>> e : cells().entrySet()) {
+            Part part = part(keyI(e.getKey()), keyJ(e.getKey()));
+            for (long c : e.getValue()) {
+                int i = keyI(c);
+                int j = keyJ(c);
+                // the cell's nodes: 0 (i, j), 1 (i + 1, j), 2 (i + 1, j + 1), 3 (i, j + 1); split along 0-2
+                int[][] n = {{i, j}, {i + 1, j}, {i + 1, j + 1}, {i, j + 1}};
+                double[] d = new double[4];
+                for (int k = 0; k < 4; k++) {
+                    d[k] = value(n[k][0], n[k][1], cache);
+                }
+                clip(part, n, d, 0, 1, 2);
+                clip(part, n, d, 0, 2, 3);
+            }
+        }
+    }
+
+    private Part part(int i, int j) {
+        return parts.computeIfAbsent(key(i, j), k -> new Part(i, j, tile));
+    }
+
+    /**
+     * Triangle (a, b, c) of a cell (counter-clockwise from above as listed: x east, z south, y up, so a b c turns
+     * from +x toward +z) clipped to the paved side, triangulated, its edge on the field's zero recorded.
+     */
+    private void clip(Part part, int[][] n, double[] d, int a, int b, int c) {
+        int[] corner = {a, b, c};
+        List<Long> poly = new ArrayList<>(4);
+        List<Boolean> onEdge = new ArrayList<>(4);
+        for (int k = 0; k < 3; k++) {
+            int p = corner[k];
+            int q = corner[(k + 1) % 3];
+            if (d[p] < 0) {
+                poly.add(nodeVertex(part, n[p][0], n[p][1]));
+                onEdge.add(false);
+            }
+            if (d[p] < 0 != d[q] < 0) {
+                poly.add(edgeVertex(part, n[p][0], n[p][1], d[p], n[q][0], n[q][1], d[q]));
+                onEdge.add(true);
+            }
+        }
+        if (poly.size() < 3) {
+            return;
+        }
+        // its material: the nearest road's at its middle
+        double mx = 0;
+        double mz = 0;
+        for (long k : poly) {
+            int v = part.keyed.get(k);
+            mx += part.x(v);
+            mz += part.z(v);
+        }
+        field.sample(mx / poly.size(), mz / poly.size(), sample);
+        int slot = slot(sample.surface);
+        int v0 = part.keyed.get(poly.get(0));
+        for (int k = 1; k + 1 < poly.size(); k++) {
+            triangleUp(part, slot, v0, part.keyed.get(poly.get(k)), part.keyed.get(poly.get(k + 1)));
+        }
+        // the edge: between two crossings next to each other round the polygon (inside on the left going round)
+        for (int k = 0; k < poly.size(); k++) {
+            int next = (k + 1) % poly.size();
+            if (onEdge.get(k) && onEdge.get(next)) {
+                part.edges.add(new long[] {poly.get(k), poly.get(next)});
+            }
+        }
+    }
 
     private static int slot(RoadSurface s) {
+        if (s == null) {
+            return GRAVEL;
+        }
         return switch (s) {
             case COBBLES -> COBBLES;
             case GRAVEL -> GRAVEL;
@@ -180,300 +325,506 @@ public final class RoadMeshes {
         };
     }
 
-    /** One road: its surface strips (steps where steep), skirts or kerbs along its edges. */
-    private void road(Road r) {
-        int m = r.count();
-        if (m < 2) {
-            return;
+    /** A triangle wound counter-clockwise seen from above. */
+    private static void triangleUp(Part part, int slot, int a, int b, int c) {
+        double cross = (part.z(b) - part.z(a)) * (part.x(c) - part.x(a))
+            - (part.x(b) - part.x(a)) * (part.z(c) - part.z(a));
+        if (cross >= 0) {
+            part.triangle(slot, a, b, c);
+        } else {
+            part.triangle(slot, a, c, b);
         }
-        double hw = r.width() / 2;
-        int strips = r.width() >= 3 ? 4 : 2;
-        // each point's horizontal tangent and left normal
-        double[] tx = new double[m];
-        double[] tz = new double[m];
-        for (int i = 0; i < m; i++) {
-            int a = Math.max(0, i - 1);
-            int b = Math.min(m - 1, i + 1);
-            double dx = r.x()[b] - r.x()[a];
-            double dz = r.z()[b] - r.z()[a];
-            double l = Geometry.length(dx, dz);
-            tx[i] = l > 0 ? dx / l : 1;
-            tz[i] = l > 0 ? dz / l : 0;
+    }
+
+    private long nodeVertex(Part part, int i, int j) {
+        long k = key(i, j) << 2 | 3;
+        if (!part.keyed.containsKey(k)) {
+            part.keyed.put(k, surfaceVertex(part, i * cell, j * cell));
         }
-        // where the steps are: footpath segments steeper than the step grade
-        boolean[] steep = new boolean[m - 1];
-        if (r.kind() == RoadKind.FOOTPATH) {
-            for (int i = 0; i + 1 < m; i++) {
-                double run = Geometry.length(r.x()[i + 1] - r.x()[i], r.z()[i + 1] - r.z()[i]);
-                steep[i] = run > 0 && Math.abs(r.y()[i + 1] - r.y()[i]) / run > surface.stepGrade();
+        return k;
+    }
+
+    /** The crossing on the grid edge between nodes p and q: computed from the edge alone, in its nodes' order. */
+    private long edgeVertex(Part part, int pi, int pj, double dp, int qi, int qj, double dq) {
+        boolean swap = qj < pj || qj == pj && qi < pi;
+        if (swap) {
+            int ti = pi;
+            int tj = pj;
+            double td = dp;
+            pi = qi;
+            pj = qj;
+            dp = dq;
+            qi = ti;
+            qj = tj;
+            dq = td;
+        }
+        int dir = qj == pj ? 0 : qi == pi ? 1 : 2;
+        long k = key(pi, pj) << 2 | dir;
+        if (!part.keyed.containsKey(k)) {
+            double t = crossing(pi * cell, pj * cell, dp, qi * cell, qj * cell, dq);
+            double x = (pi + t * (qi - pi)) * cell;
+            double z = (pj + t * (qj - pj)) * cell;
+            part.keyed.put(k, surfaceVertex(part, x, z));
+        }
+        return k;
+    }
+
+    /**
+     * Where along the grid edge from p to q the paved field crosses zero: by bisection of the field itself (the
+     * edge's nodes' values only start it), so the surface's edge lies on the field's (and the terrain's) edge; kept a
+     * twentieth of a cell off either node (no slivers). The edge alone decides it: the same from either cell or tile.
+     */
+    private double crossing(double px, double pz, double dp, double qx, double qz, double dq) {
+        double lo = 0;
+        double hi = 1;
+        boolean insideAtLo = dp < 0;
+        for (int it = 0; it < 12; it++) {
+            double m = (lo + hi) / 2;
+            field.sample(px + m * (qx - px), pz + m * (qz - pz), sample);
+            if (sample.paved < 0 == insideAtLo) {
+                lo = m;
+            } else {
+                hi = m;
             }
         }
-        int slot = slot(r.surface());
-        double camber = surface.camber();
-        double lift = surface.lift();
-        double[][] pos = new double[strips + 1][3];
-        double[][] next = new double[strips + 1][3];
-        for (int i = 0; i + 1 < m; i++) {
-            if (steep[i]) {
-                continue;
+        return Math.clamp((lo + hi) / 2, NUDGE, 1 - NUDGE);
+    }
+
+    /** A vertex of the surface at (x, z): its height the field's, its normal from the field's slope. */
+    private int surfaceVertex(Part part, double x, double z) {
+        double y = height(x, z);
+        // lifted off the terrain inside the edge (no shared depth with it), on it at the edge
+        y += surface.lift() * Maths.smoothstep(0, 1, -sample.paved / LIFT_RAMP);
+        double e = 0.2;
+        double gx = (height(x + e, z) - height(x - e, z)) / (2 * e);
+        double gz = (height(x, z + e) - height(x, z - e)) / (2 * e);
+        double l = Math.sqrt(gx * gx + gz * gz + 1);
+        double nx = -gx / l;
+        double ny = 1 / l;
+        double nz = -gz / l;
+        // the tangent: +x in the surface (u along x, v along -z)
+        double tx = 1 - nx * nx;
+        double ty = -nx * ny;
+        double tz = -nx * nz;
+        double tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+        double texture = surface.texture();
+        return part.vertex(x, y, z, nx, ny, nz, tx / tl, ty / tl, tz / tl, (x - part.x0) / texture,
+            -(z - part.z0) / texture);
+    }
+
+    private double height(double x, double z) {
+        field.sample(x, z, sample);
+        return sample.height;
+    }
+
+    // ----------------------------------------------------------------------------------------------------- kerbs
+
+    /** Kerbs along the surface's edge where it is cobbled, in each tile, closed where the cobbles end. */
+    private void kerbs() {
+        for (Part part : parts.values()) {
+            // the edge's cobbled pieces, and how many each vertex has (1: a kerb ends there)
+            List<long[]> kerbed = new ArrayList<>();
+            Map<Long, Integer> ends = new HashMap<>();
+            for (long[] e : part.edges) {
+                int a = part.keyed.get(e[0]);
+                int b = part.keyed.get(e[1]);
+                double mx = (part.x(a) + part.x(b)) / 2;
+                double mz = (part.z(a) + part.z(b)) / 2;
+                double[] n = outward(mx, mz);
+                field.sample(mx - n[0] * 0.15, mz - n[1] * 0.15, sample);
+                if (sample.surface == RoadSurface.COBBLES) {
+                    kerbed.add(e);
+                    ends.merge(e[0], 1, Integer::sum);
+                    ends.merge(e[1], 1, Integer::sum);
+                }
             }
-            for (int k = 0; k <= strips; k++) {
-                double o = -hw + 2 * hw * k / strips;
-                section(r, i, tx, tz, o, camber, lift, pos[k]);
-                section(r, i + 1, tx, tz, o, camber, lift, next[k]);
+            for (long[] e : kerbed) {
+                kerbPiece(part, part.keyed.get(e[0]), part.keyed.get(e[1]));
             }
-            double cx = (r.x()[i] + r.x()[i + 1]) / 2;
-            double cz = (r.z()[i] + r.z()[i + 1]) / 2;
-            if (settlement.square().outside(cx, cz) < 0) {
-                continue; // the square's own cobbles
-            }
-            Batch b = batch(cx, cz);
-            for (int k = 0; k < strips; k++) {
-                quad(b, slot, pos[k], next[k], next[k + 1], pos[k + 1], 0, 1, 0);
-            }
-            boolean kerbs = r.surface() == RoadSurface.COBBLES;
-            for (int side : new int[] {-1, 1}) {
-                double[] e0 = side < 0 ? pos[0] : pos[strips];
-                double[] e1 = side < 0 ? next[0] : next[strips];
-                double ox = side * tz[i];
-                double oz = -side * tx[i];
-                if (kerbs) {
-                    kerb(b, r, i, e0, e1, side, tx, tz);
-                } else {
-                    // a skirt a little out and down, so no gap shows where the ground is not graded
-                    double[] s0 = {e0[0] + side * tz[i] * 0.15, e0[1] - SKIRT, e0[2] - side * tx[i] * 0.15};
-                    double[] s1 = {e1[0] + side * tz[i + 1] * 0.15, e1[1] - SKIRT, e1[2] - side * tx[i + 1] * 0.15};
-                    quad(b, slot, e0, e1, s1, s0, ox, 1, oz);
+            for (Map.Entry<Long, Integer> end : ends.entrySet()) {
+                int v = part.keyed.get(end.getKey());
+                if (end.getValue() == 1 && !onBorder(part, part.x(v), part.z(v))) {
+                    kerbEnd(part, v, kerbed, end.getKey());
                 }
             }
         }
-        if (r.kind() == RoadKind.FOOTPATH) {
-            steps(r, steep, tx, tz);
-        }
     }
 
-    /** The surface's point at offset {@code o} (left positive) across point {@code i}: crown less the camber. */
-    private static void section(Road r, int i, double[] tx, double[] tz, double o, double camber, double lift,
-        double[] out) {
-        out[0] = r.x()[i] + tz[i] * o;
-        out[1] = r.y()[i] - camber * Math.abs(o) + lift;
-        out[2] = r.z()[i] - tx[i] * o;
+    /** Whether ({@code x}, {@code z}) lies on its tile's border (where a kerb goes on in the next tile). */
+    private boolean onBorder(Part part, double x, double z) {
+        double eps = 1e-9;
+        return Math.abs(x - part.x0) < eps || Math.abs(x - part.x0 - tile) < eps || Math.abs(z - part.z0) < eps
+            || Math.abs(z - part.z0 - tile) < eps;
     }
 
-    /**
-     * A kerb along one edge of a segment: its inner face up from the cobbles, its top, its outer face down into the
-     * ground; left out where another road's surface covers it (a junction's mouth).
-     */
-    private void kerb(Batch b, Road r, int i, double[] e0, double[] e1, int side, double[] tx, double[] tz) {
+    /** The unit outward direction of the paved field at ({@code x}, {@code z}) (its gradient), x then z. */
+    private double[] outward(double x, double z) {
+        double e = 0.05;
+        field.sample(x + e, z, sample);
+        double px = sample.paved;
+        field.sample(x - e, z, sample);
+        double mx = sample.paved;
+        field.sample(x, z + e, sample);
+        double pz = sample.paved;
+        field.sample(x, z - e, sample);
+        double mz = sample.paved;
+        double gx = px - mx;
+        double gz = pz - mz;
+        double l = Math.sqrt(gx * gx + gz * gz);
+        return l > 0 ? new double[] {gx / l, gz / l} : new double[] {1, 0};
+    }
+
+    /** A kerb's profile at surface vertex v: inner foot (v), inner top, outer top, outer foot. */
+    private double[][] profile(Part part, int v) {
+        double x = part.x(v);
+        double y = part.y(v);
+        double z = part.z(v);
+        double[] n = outward(x, z);
         double kw = surface.kerbWidth();
         double kh = surface.kerbHeight();
-        double mx = (e0[0] + e1[0]) / 2 + side * tz[i] * kw / 2;
-        double mz = (e0[2] + e1[2]) / 2 - side * tx[i] * kw / 2;
-        for (Road other : settlement.roads()) {
-            if (other != r && other.distance(mx, mz) < other.width() / 2 - 0.05) {
-                return;
-            }
-        }
-        if (settlement.square().outside(mx, mz) < kw) {
-            return;
-        }
-        double[] in0 = e0;
-        double[] in1 = e1;
-        double[] top0 = {e0[0], e0[1] + kh, e0[2]};
-        double[] top1 = {e1[0], e1[1] + kh, e1[2]};
-        double[] out0 = {e0[0] + side * tz[i] * kw, e0[1] + kh, e0[2] - side * tx[i] * kw};
-        double[] out1 = {e1[0] + side * tz[i + 1] * kw, e1[1] + kh, e1[2] - side * tx[i + 1] * kw};
-        double[] low0 = {out0[0], e0[1] - SKIRT, out0[2]};
-        double[] low1 = {out1[0], e1[1] - SKIRT, out1[2]};
-        double nx = side * tz[i];
-        double nz = -side * tx[i];
-        quad(b, KERB, in0, in1, top1, top0, -nx, 0, -nz);
-        quad(b, KERB, top0, top1, out1, out0, 0, 1, 0);
-        quad(b, KERB, out0, out1, low1, low0, nx, 0, nz);
+        return new double[][] {{x, y, z}, {x, y + kh, z}, {x + n[0] * kw, y + kh, z + n[1] * kw},
+            {x + n[0] * kw, y - FOOT, z + n[1] * kw}, {n[0], 0, n[1]}};
     }
 
-    /**
-     * Stone steps along each flight of steep segments: a tread per rise of {@link SettlementParameters.Surface#stepRise}
-     * spanning the flight's length evenly, risers between, and the treads' sides down into the ground.
-     */
-    private void steps(Road r, boolean[] steep, double[] tx, double[] tz) {
-        int m = r.count();
-        double hw = r.width() / 2;
-        double[] s = new double[m];
-        for (int i = 1; i < m; i++) {
-            s[i] = s[i - 1] + Geometry.length(r.x()[i] - r.x()[i - 1], r.z()[i] - r.z()[i - 1]);
+    private void kerbPiece(Part part, int a, int b) {
+        double[][] pa = profile(part, a);
+        double[][] pb = profile(part, b);
+        double[] out = {(pa[4][0] + pb[4][0]) / 2, 0, (pa[4][1] + pb[4][1]) / 2};
+        // inner face (toward the road), top, outer face
+        quad(part, KERB, pa[0], pb[0], pb[1], pa[1], -out[0], 0, -out[2]);
+        quad(part, KERB, pa[1], pb[1], pb[2], pa[2], 0, 1, 0);
+        quad(part, KERB, pa[2], pb[2], pb[3], pa[3], out[0], 0, out[2]);
+    }
+
+    /** Closes a kerb's end at surface vertex v, facing away along the edge from its kerbed piece. */
+    private void kerbEnd(Part part, int v, List<long[]> kerbed, long key) {
+        double[][] p = profile(part, v);
+        int other = -1;
+        for (long[] e : kerbed) {
+            if (e[0] == key) {
+                other = part.keyed.get(e[1]);
+            } else if (e[1] == key) {
+                other = part.keyed.get(e[0]);
+            }
         }
-        Line line = new Line(r.x(), r.z());
+        double fx = part.x(v) - part.x(other);
+        double fz = part.z(v) - part.z(other);
+        quad(part, KERB, p[0], p[1], p[2], p[3], fx, 0, fz);
+    }
+
+    // ----------------------------------------------------------------------------------------------------- steps
+
+    /**
+     * Stone steps up each flight of a footpath: a tread per rise of {@link SettlementParameters.Surface#stepRise},
+     * risers between, sides down into the ground. The first and last risers stand on the surface's own vertices
+     * where it is cut square across the path; the treads' cross-sections take the bottom cut's vertices, then (from
+     * the flight's middle tread, which joins the two) the top cut's, so every edge is shared.
+     */
+    private void steps(Road r) {
+        int m = r.count();
         int i = 0;
         while (i < m - 1) {
-            if (!steep[i]) {
+            if (!field.steep(r.id(), i)) {
                 i++;
                 continue;
             }
             int a = i;
-            while (i < m - 1 && steep[i]) {
+            while (i < m - 1 && field.steep(r.id(), i)) {
                 i++;
             }
-            int bEnd = i;
-            double sa = s[a];
-            double sb = s[bEnd];
-            double ya = r.y()[a];
-            double yb = r.y()[bEnd];
-            double rise = yb - ya;
-            int count = Math.max(1, (int) Math.ceil(Math.abs(rise) / surface.stepRise()));
-            double[] h = new double[count + 2]; // h[0] before the flight, h[1..count] the treads, h[count + 1] after
-            h[0] = ya;
-            for (int k = 0; k < count; k++) {
-                h[k + 1] = ya + rise * (k + (rise > 0 ? 1 : 0)) / count;
-            }
-            h[count + 1] = yb;
-            double[] p = new double[4];
-            double[][] left = new double[count + 1][];
-            double[][] right = new double[count + 1][];
-            double[] tangentX = new double[count + 1];
-            double[] tangentZ = new double[count + 1];
-            for (int k = 0; k <= count; k++) {
-                line.at(sa + (sb - sa) * k / count, p);
-                left[k] = new double[] {p[0] + p[3] * hw, 0, p[1] - p[2] * hw};
-                right[k] = new double[] {p[0] - p[3] * hw, 0, p[1] + p[2] * hw};
-                tangentX[k] = p[2];
-                tangentZ[k] = p[3];
-            }
-            double lift = surface.lift() + surface.stepRise() / 2;
-            for (int k = 0; k <= count; k++) {
-                double tX = tangentX[k];
-                double tZ = tangentZ[k];
-                double[] l = {left[k][0], 0, left[k][2]};
-                double[] rr = {right[k][0], 0, right[k][2]};
-                Batch b = batch((l[0] + rr[0]) / 2, (l[2] + rr[2]) / 2);
-                // the riser at boundary k: from the height before it to the one after, facing the lower side
-                double before = h[k] + (k == 0 ? surface.lift() : lift);
-                double after = h[k + 1] + (k == count ? surface.lift() : lift);
-                if (Math.abs(after - before) > 1e-4) {
-                    double lo = Math.min(before, after);
-                    double hi = Math.max(before, after);
-                    double sign = after > before ? -1 : 1;
-                    quad(b, STEPS, new double[] {l[0], lo, l[2]}, new double[] {rr[0], lo, rr[2]},
-                        new double[] {rr[0], hi, rr[2]}, new double[] {l[0], hi, l[2]}, sign * tX, 0, sign * tZ);
+            flight(r, a, i);
+        }
+    }
+
+    private void flight(Road r, int a, int b) {
+        double hw = r.width() / 2;
+        // the cuts: the surface's edge vertices on the line square across the paved segment beside the flight
+        List<double[]> bottom = cut(r, a, a - 1);
+        List<double[]> top = cut(r, b, b + 1);
+        if (bottom.size() < 2 || top.size() < 2) {
+            return;
+        }
+        double ya = r.y()[a];
+        double yb = r.y()[b];
+        double rise = yb - ya;
+        int count = Math.max(2, (int) Math.ceil(Math.abs(rise) / surface.stepRise()));
+        Polyline2 line = new Polyline2(Arrays.copyOfRange(r.x(), a, b + 1), Arrays.copyOfRange(r.z(), a, b + 1));
+        double length = line.length();
+        // tread k at height h[k]: up, each a rise above the last; down, the first level with the path
+        double[] h = new double[count];
+        for (int k = 0; k < count; k++) {
+            h[k] = ya + rise * (k + (rise > 0 ? 1 : 0)) / count;
+        }
+        int middle = count / 2;
+        // boundary k's cross-section: the bottom cut's across-offsets up to the middle tread, the top cut's after
+        double[][][] at = new double[count + 1][][];
+        double[] p = new double[4];
+        for (int k = 0; k <= count; k++) {
+            List<double[]> set = k <= middle ? bottom : top;
+            if (k == 0) {
+                at[k] = positions(bottom);
+            } else if (k == count) {
+                at[k] = positions(top);
+            } else {
+                line.at(length * k / count, p);
+                at[k] = new double[set.size()][];
+                for (int q = 0; q < set.size(); q++) {
+                    double across = set.get(q)[3];
+                    at[k][q] = new double[] {p[0] + p[3] * across, 0, p[1] - p[2] * across};
                 }
-                if (k < count) {
-                    // the tread from boundary k to k + 1, and its sides down past the step below
-                    double y = h[k + 1] + lift;
-                    double[] l1 = {left[k + 1][0], y, left[k + 1][2]};
-                    double[] r1 = {right[k + 1][0], y, right[k + 1][2]};
-                    double[] l0 = {l[0], y, l[2]};
-                    double[] r0 = {rr[0], y, rr[2]};
-                    quad(b, STEPS, l0, l1, r1, r0, 0, 1, 0);
-                    double bottom = y - surface.stepRise() - 0.25;
-                    quad(b, STEPS, l0, l1, new double[] {l1[0], bottom, l1[2]}, new double[] {l0[0], bottom, l0[2]},
-                        tZ, 0, -tX);
-                    quad(b, STEPS, r0, r1, new double[] {r1[0], bottom, r1[2]}, new double[] {r0[0], bottom, r0[2]},
-                        -tZ, 0, tX);
+            }
+        }
+        Part part = part(Math.floorDiv((int) Math.floor(r.x()[a] / cell), perTile),
+            Math.floorDiv((int) Math.floor(r.z()[a] / cell), perTile));
+        double foot = Math.min(ya, yb) - surface.stepRise() - FOOT;
+        double[] fwd = {r.x()[b] - r.x()[a], 0, r.z()[b] - r.z()[a]};
+        for (int k = 0; k <= count; k++) {
+            // the riser at boundary k: from the height before it (the cut's own, at the bottom) to the one after
+            double[][] row = at[k];
+            double[] lo = new double[row.length];
+            double[] hi = new double[row.length];
+            for (int q = 0; q < row.length; q++) {
+                lo[q] = k == 0 ? row[q][1] : h[k - 1];
+                hi[q] = k == count ? row[q][1] : h[k];
+            }
+            for (int q = 0; q + 1 < row.length; q++) {
+                double[] l0 = {row[q][0], lo[q], row[q][2]};
+                double[] l1 = {row[q + 1][0], lo[q + 1], row[q + 1][2]};
+                double[] h1 = {row[q + 1][0], hi[q + 1], row[q + 1][2]};
+                double[] h0 = {row[q][0], hi[q], row[q][2]};
+                double dir = Math.signum(average(lo) - average(hi));
+                if (Math.abs(average(lo) - average(hi)) > 1e-6) {
+                    quad(part, STEPS, l0, l1, h1, h0, dir * fwd[0], 0, dir * fwd[2]);
                 }
+            }
+            if (k < count) {
+                // the tread from boundary k to k + 1 at h[k]: zipped between their cross-sections
+                double y = h[k];
+                zip(part, at[k], at[k + 1], y);
+                side(part, at, k, h, foot, 0, hw);
+                side(part, at, k, h, foot, at[k].length - 1, hw);
             }
         }
     }
 
-    // --------------------------------------------------------------------------------------------------------- square
-
-    /** The square's cobbles on its plane, a quad a metre, and kerbs round its edges where no road comes in. */
-    private void square(Square sq) {
-        double lift = surface.lift();
-        double[] q = new double[2];
-        int nu = (int) Math.ceil(2 * sq.halfLength());
-        int nv = (int) Math.ceil(2 * sq.halfWidth());
-        double[][] grid = new double[(nu + 1) * (nv + 1)][];
-        for (int v = 0; v <= nv; v++) {
-            for (int u = 0; u <= nu; u++) {
-                double along = -sq.halfLength() + 2 * sq.halfLength() * u / nu;
-                double across = -sq.halfWidth() + 2 * sq.halfWidth() * v / nv;
-                sq.point(along, across, q);
-                grid[v * (nu + 1) + u] = new double[] {q[0], sq.height(q[0], q[1]) + lift, q[1]};
+    /**
+     * The surface's edge on the cut at point {@code at} of road r (square across the paved segment toward
+     * {@code beside}), left to right: the chain of the surface's edge vertices from the one nearest the cut's middle,
+     * both ways, while they stay within a cell of the cut's line (its corners included), so the steps' riser
+     * shares every vertex and edge of it.
+     */
+    private List<double[]> cut(Road r, int at, int beside) {
+        double px = r.x()[at];
+        double pz = r.z()[at];
+        double dx = r.x()[at] - r.x()[beside];
+        double dz = r.z()[at] - r.z()[beside];
+        double l = Math.sqrt(dx * dx + dz * dz);
+        dx /= l;
+        dz /= l;
+        double hw = r.width() / 2;
+        double near = hw + 2 * cell;
+        // the edge's segments about the cut, as world positions (the same doubles in every tile)
+        Map<String, List<double[]>> next = new HashMap<>();
+        for (Part part : parts.values()) {
+            if (px < part.x0 - near || px > part.x0 + tile + near || pz < part.z0 - near
+                || pz > part.z0 + tile + near) {
+                continue;
             }
-        }
-        for (int v = 0; v < nv; v++) {
-            for (int u = 0; u < nu; u++) {
-                double[] a = grid[v * (nu + 1) + u];
-                double[] b = grid[v * (nu + 1) + u + 1];
-                double[] c = grid[(v + 1) * (nu + 1) + u + 1];
-                double[] d = grid[(v + 1) * (nu + 1) + u];
-                quad(batch((a[0] + c[0]) / 2, (a[2] + c[2]) / 2), COBBLES, a, b, c, d, 0, 1, 0);
-            }
-        }
-        // kerbs: a stone a metre along each edge, outside it
-        double kw = surface.kerbWidth();
-        double kh = surface.kerbHeight();
-        double[][] edges = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
-        for (double[] e : edges) {
-            boolean alongEdge = e[1] != 0; // the edge runs along the length
-            double half = alongEdge ? sq.halfLength() : sq.halfWidth();
-            int count = (int) Math.ceil(2 * half);
-            for (int k = 0; k < count; k++) {
-                double t0 = -half + 2 * half * k / count;
-                double t1 = -half + 2 * half * (k + 1) / count;
-                double[][] c = new double[4][];
-                double[] off = {0, kw};
-                int n = 0;
-                for (double o : off) {
-                    for (double t : new double[] {t0, t1}) {
-                        double along = alongEdge ? t : e[0] * (sq.halfLength() + o);
-                        double across = alongEdge ? e[1] * (sq.halfWidth() + o) : t;
-                        sq.point(along, across, q);
-                        c[n++] = new double[] {q[0], sq.height(q[0], q[1]) + lift + kh, q[1]};
-                    }
-                }
-                double mx = (c[0][0] + c[3][0]) / 2;
-                double mz = (c[0][2] + c[3][2]) / 2;
-                if (covered(mx, mz)) {
+            for (long[] e : part.edges) {
+                int va = part.keyed.get(e[0]);
+                int vb = part.keyed.get(e[1]);
+                double[] pa = {part.x(va), part.y(va), part.z(va)};
+                double[] pb = {part.x(vb), part.y(vb), part.z(vb)};
+                if (Polygons.length(pa[0] - px, pa[2] - pz) > near && Polygons.length(pb[0] - px, pb[2] - pz) > near) {
                     continue;
                 }
-                double[] outward = new double[2];
-                sq.point(alongEdge ? 0 : e[0], alongEdge ? e[1] : 0, outward);
-                double ox = outward[0] - sq.x();
-                double oz = outward[1] - sq.z();
-                Batch b = batch(mx, mz);
-                double[] in0 = {c[0][0], c[0][1] - kh, c[0][2]};
-                double[] in1 = {c[1][0], c[1][1] - kh, c[1][2]};
-                double[] lo2 = {c[2][0], c[2][1] - kh - SKIRT, c[2][2]};
-                double[] lo3 = {c[3][0], c[3][1] - kh - SKIRT, c[3][2]};
-                quad(b, KERB, in0, in1, c[1], c[0], -ox, 0, -oz);
-                quad(b, KERB, c[0], c[1], c[3], c[2], 0, 1, 0);
-                quad(b, KERB, c[2], c[3], lo3, lo2, ox, 0, oz);
+                next.computeIfAbsent(name(pa), k -> new ArrayList<>()).add(pb);
+                next.computeIfAbsent(name(pb), k -> new ArrayList<>()).add(pa);
             }
         }
+        double band = cell;
+        double[] start = null;
+        double best = Double.MAX_VALUE;
+        for (List<double[]> ends : next.values()) {
+            for (double[] q : ends) {
+                double along = (q[0] - px) * dx + (q[2] - pz) * dz;
+                double across = (q[0] - px) * dz - (q[2] - pz) * dx;
+                if (Math.abs(along) < band && Math.abs(across) < best) {
+                    best = Math.abs(across);
+                    start = q;
+                }
+            }
+        }
+        List<double[]> chain = new ArrayList<>();
+        if (start == null) {
+            return chain;
+        }
+        chain.add(start);
+        for (int side = 0; side < 2; side++) {
+            double[] previous = null;
+            double[] current = start;
+            while (true) {
+                double[] step = null;
+                for (double[] q : next.getOrDefault(name(current), List.of())) {
+                    if (previous != null && same(q, previous) || contains(chain, q[0], q[2])) {
+                        continue;
+                    }
+                    double along = (q[0] - px) * dx + (q[2] - pz) * dz;
+                    double across = (q[0] - px) * dz - (q[2] - pz) * dx;
+                    double from = (current[0] - px) * dz - (current[2] - pz) * dx;
+                    // outward across the path (a corner's included), never along its side
+                    boolean outward = side == 0 ? across > from + 1e-3 : across < from - 1e-3;
+                    if (Math.abs(along) < band && Math.abs(across) <= hw + cell && outward) {
+                        step = q;
+                        break;
+                    }
+                }
+                if (step == null) {
+                    break;
+                }
+                if (side == 0) {
+                    chain.add(step);
+                } else {
+                    chain.addFirst(step);
+                }
+                previous = current;
+                current = step;
+            }
+        }
+        // left (+across) first
+        List<double[]> out = new ArrayList<>();
+        for (double[] q : chain) {
+            out.add(new double[] {q[0], q[1], q[2], (q[0] - px) * dz - (q[2] - pz) * dx});
+        }
+        if (out.size() > 1 && out.getFirst()[3] < out.getLast()[3]) {
+            java.util.Collections.reverse(out);
+        }
+        return out;
     }
 
-    /** Whether a road's surface covers ({@code x}, {@code z}). */
-    private boolean covered(double x, double z) {
-        for (Road r : settlement.roads()) {
-            if (r.distance(x, z) < r.width() / 2 + 0.2) {
+    private static String name(double[] q) {
+        return Double.doubleToLongBits(q[0]) + ":" + Double.doubleToLongBits(q[2]);
+    }
+
+    private static boolean same(double[] a, double[] b) {
+        return a[0] == b[0] && a[2] == b[2];
+    }
+
+    private static boolean contains(List<double[]> list, double x, double z) {
+        for (double[] q : list) {
+            if (q[0] == x && q[2] == z) {
                 return true;
             }
         }
         return false;
     }
 
-    // ----------------------------------------------------------------------------------------------------- primitives
+    private static double[][] positions(List<double[]> set) {
+        double[][] out = new double[set.size()][];
+        for (int q = 0; q < set.size(); q++) {
+            out[q] = new double[] {set.get(q)[0], set.get(q)[1], set.get(q)[2]};
+        }
+        return out;
+    }
+
+    private static double average(double[] values) {
+        double s = 0;
+        for (double v : values) {
+            s += v;
+        }
+        return s / values.length;
+    }
+
+    /** A tread at height y between cross-sections a and b (left to right each), triangulated by zipping them. */
+    private void zip(Part part, double[][] a, double[][] b, double y) {
+        int i = 0;
+        int j = 0;
+        while (i < a.length - 1 || j < b.length - 1) {
+            double ta = i < a.length - 1 ? (double) (i + 1) / (a.length - 1) : 2;
+            double tb = j < b.length - 1 ? (double) (j + 1) / (b.length - 1) : 2;
+            double[] p0 = {a[i][0], y, a[i][2]};
+            double[] p1 = {b[j][0], y, b[j][2]};
+            if (ta <= tb) {
+                double[] p2 = {a[i + 1][0], y, a[i + 1][2]};
+                triangle(part, STEPS, p0, p1, p2, 0, 1, 0);
+                i++;
+            } else {
+                double[] p2 = {b[j + 1][0], y, b[j + 1][2]};
+                triangle(part, STEPS, p0, p1, p2, 0, 1, 0);
+                j++;
+            }
+        }
+    }
 
     /**
-     * A quad a, b, c, d (in order round it) into {@code b}'s {@code slot}: wound so its face's normal points along
-     * ({@code hx}, {@code hy}, {@code hz}); flat normals, planar texture coordinates (from above where it faces up,
-     * along and up where it stands).
+     * Tread k's side (q: its first or last cross-section point), from its height down to {@code foot}: a column
+     * holding every height at its two ends (the risers' ends), fanned from its middle.
      */
-    private void quad(Batch batch, int slot, double[] a, double[] b, double[] c, double[] d, double hx, double hy,
+    private void side(Part part, double[][][] at, int k, double[] h, double foot, int q, double hw) {
+        int count = h.length;
+        double[] l = at[k][q == 0 ? 0 : at[k].length - 1];
+        double[] r = at[k + 1][q == 0 ? 0 : at[k + 1].length - 1];
+        double top = h[k];
+        // heights on each end: the foot, the tread, and the neighbouring tread or cut where lower than this one
+        List<double[]> ring = new ArrayList<>();
+        ring.add(new double[] {l[0], foot, l[2]});
+        double below = k == 0 ? l[1] : h[k - 1];
+        if (below > foot && below < top) {
+            ring.add(new double[] {l[0], below, l[2]});
+        }
+        ring.add(new double[] {l[0], top, l[2]});
+        ring.add(new double[] {r[0], top, r[2]});
+        double after = k + 1 == count ? r[1] : h[k + 1];
+        if (after > foot && after < top) {
+            ring.add(new double[] {r[0], after, r[2]});
+        }
+        ring.add(new double[] {r[0], foot, r[2]});
+        double cx = 0;
+        double cy = 0;
+        double cz = 0;
+        for (double[] p : ring) {
+            cx += p[0];
+            cy += p[1];
+            cz += p[2];
+        }
+        double[] c = {cx / ring.size(), cy / ring.size(), cz / ring.size()};
+        // outward: across the path, away from its middle
+        double[] o = at[k][at[k].length / 2];
+        double ox = l[0] - o[0];
+        double oz = l[2] - o[2];
+        if (Math.abs(ox) + Math.abs(oz) < 1e-9) {
+            ox = 1;
+        }
+        for (int s = 0; s < ring.size(); s++) {
+            triangle(part, STEPS, ring.get(s), ring.get((s + 1) % ring.size()), c, ox, 0, oz);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------- primitives
+
+    private void quad(Part part, int slot, double[] a, double[] b, double[] c, double[] d, double hx, double hy,
         double hz) {
-        double ux = c[0] - a[0];
-        double uy = c[1] - a[1];
-        double uz = c[2] - a[2];
-        double vx = d[0] - b[0];
-        double vy = d[1] - b[1];
-        double vz = d[2] - b[2];
-        // the normal of a quad: across its diagonals
+        triangle(part, slot, a, b, c, hx, hy, hz);
+        triangle(part, slot, a, c, d, hx, hy, hz);
+    }
+
+    /**
+     * A flat triangle into {@code part}'s {@code slot}, wound to face along ({@code hx}, {@code hy}, {@code hz});
+     * degenerate ones left out. Its own vertices (its normal is its own), at the given positions exactly.
+     */
+    private void triangle(Part part, int slot, double[] a, double[] b, double[] c, double hx, double hy, double hz) {
+        double ux = b[0] - a[0];
+        double uy = b[1] - a[1];
+        double uz = b[2] - a[2];
+        double vx = c[0] - a[0];
+        double vy = c[1] - a[1];
+        double vz = c[2] - a[2];
         double nx = uy * vz - uz * vy;
         double ny = uz * vx - ux * vz;
         double nz = ux * vy - uy * vx;
         double l = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        if (l < 1e-12) {
+        // degenerate (two corners as one, as where a riser has no height at one end): nothing to draw
+        if (l < 1e-12 || close(a, b) || close(b, c) || close(a, c)) {
             return;
         }
         nx /= l;
@@ -489,55 +840,75 @@ public final class RoadMeshes {
         double tx;
         double ty;
         double tz;
-        Part part = batch.parts[slot];
-        int[] index = new int[4];
-        double[][] corners = {a, b, c, d};
+        int[] index = new int[3];
+        double[][] corners = {a, b, c};
         if (ny > 0.5) {
-            // the tangent: +x in the surface (u along x, v along -z)
             tx = 1 - nx * nx;
             ty = -nx * ny;
             tz = -nx * nz;
             double tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
-            tx /= tl;
-            ty /= tl;
-            tz /= tl;
-            for (int k = 0; k < 4; k++) {
+            for (int k = 0; k < 3; k++) {
                 double[] p = corners[k];
-                index[k] = part.vertex(p[0], p[1], p[2], nx, ny, nz, tx, ty, tz, (p[0] - batch.x0) / texture,
-                    -(p[2] - batch.z0) / texture);
-                batch.minY = Math.min(batch.minY, p[1]);
+                index[k] = part.vertex(p[0], p[1], p[2], nx, ny, nz, tx / tl, ty / tl, tz / tl,
+                    (p[0] - part.x0) / texture, -(p[2] - part.z0) / texture);
             }
         } else {
-            // standing: the tangent up x the normal, horizontal; v up
             tx = nz;
-            ty = 0;
             tz = -nx;
             double tl = Math.sqrt(tx * tx + tz * tz);
             if (tl < 1e-9) {
                 tx = 1;
                 tz = 0;
-            } else {
-                tx /= tl;
-                tz /= tl;
+                tl = 1;
             }
             double base = Math.floor(a[1]);
-            for (int k = 0; k < 4; k++) {
+            for (int k = 0; k < 3; k++) {
                 double[] p = corners[k];
-                double u = ((p[0] - batch.x0) * tx + (p[2] - batch.z0) * tz) / texture;
-                index[k] = part.vertex(p[0], p[1], p[2], nx, ny, nz, tx, ty, tz, u, (p[1] - base) / texture);
-                batch.minY = Math.min(batch.minY, p[1]);
+                double u = ((p[0] - part.x0) * tx + (p[2] - part.z0) * tz) / tl / texture;
+                index[k] = part.vertex(p[0], p[1], p[2], nx, ny, nz, tx / tl, 0, tz / tl, u, (p[1] - base) / texture);
             }
         }
-        // counter-clockwise seen from the normal's side
-        double gx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]);
-        double gy = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]);
-        double gz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-        if (gx * nx + gy * ny + gz * nz >= 0) {
-            part.triangle(index[0], index[1], index[2]);
-            part.triangle(index[0], index[2], index[3]);
+        if (flip) {
+            part.triangle(slot, index[0], index[2], index[1]);
         } else {
-            part.triangle(index[0], index[2], index[1]);
-            part.triangle(index[0], index[3], index[2]);
+            part.triangle(slot, index[0], index[1], index[2]);
         }
+    }
+
+    private static boolean close(double[] a, double[] b) {
+        return Math.abs(a[0] - b[0]) < 3e-4 && Math.abs(a[1] - b[1]) < 3e-4 && Math.abs(a[2] - b[2]) < 3e-4;
+    }
+
+    private List<Tile> write() {
+        List<Tile> tiles = new ArrayList<>();
+        MeshWriter writer = new MeshWriter();
+        for (Part part : parts.values()) {
+            int total = 0;
+            for (int s = 0; s < SLOTS; s++) {
+                total += part.counts[s];
+            }
+            if (total == 0) {
+                continue;
+            }
+            double y0 = Math.floor(part.minY);
+            writer.reset();
+            for (int k = 0; k < part.vertices; k++) {
+                int o = 11 * k;
+                writer.vertex(part.v[o] - part.x0, part.v[o + 1] - y0, part.v[o + 2] - part.z0, part.v[o + 3],
+                    part.v[o + 4], part.v[o + 5], part.v[o + 6], part.v[o + 7], part.v[o + 8], part.v[o + 9],
+                    part.v[o + 10]);
+            }
+            for (int s = 0; s < SLOTS; s++) {
+                if (s > 0) {
+                    writer.nextSubmesh();
+                }
+                int[] t = part.triangles[s];
+                for (int k = 0; k < part.counts[s]; k++) {
+                    writer.triangle(t[3 * k], t[3 * k + 1], t[3 * k + 2]);
+                }
+            }
+            tiles.add(new Tile(part.i, part.j, part.x0, y0, part.z0, writer.build(0)));
+        }
+        return tiles;
     }
 }

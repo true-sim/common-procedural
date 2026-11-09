@@ -65,6 +65,7 @@ public final class Ecology {
     private final int apple;
     private final double halo;
     private final Obstacles obstacles;
+    private final EcologyClearing clearing;
 
     /** An ecology of {@code species} on {@code terrain}. */
     public Ecology(EcologyTerrain terrain, EcologyParameters parameters, List<Species> species) {
@@ -110,10 +111,14 @@ public final class Ecology {
         }
         halo = (parameters.placement().iterations() + 1) * conflict;
         obstacles = Obstacles.NONE;
+        clearing = EcologyClearing.NONE;
     }
 
-    /** {@code base} with {@code avoided}: the same conditions and analysis (shared), plants kept off the obstacles. */
-    private Ecology(Ecology base, Obstacles avoided) {
+    /**
+     * {@code base} with {@code avoided} and {@code cleared}: the same conditions and analysis (shared), plants kept off
+     * the obstacles and the clearing.
+     */
+    private Ecology(Ecology base, Obstacles avoided, EcologyClearing cleared) {
         terrain = base.terrain;
         parameters = base.parameters;
         species = base.species;
@@ -128,6 +133,7 @@ public final class Ecology {
         apple = base.apple;
         halo = base.halo;
         obstacles = avoided;
+        clearing = cleared;
     }
 
     /**
@@ -136,7 +142,21 @@ public final class Ecology {
      * obstacles block (taken out before thinning, so their neighbours may stand).
      */
     public Ecology avoiding(Obstacles avoided) {
-        return new Ecology(this, java.util.Objects.requireNonNull(avoided, "obstacles"));
+        return new Ecology(this, java.util.Objects.requireNonNull(avoided, "obstacles"), clearing);
+    }
+
+    /**
+     * This ecology with its plants kept off ground {@code newClearing} keeps open (roads, plots, a village's square):
+     * the same conditions, fields and terrain analysis (shared); each placement candidate's cover multiplied by the
+     * clearing's keep before plants are spaced, so cleared ground has none and its edge thins them out.
+     */
+    public Ecology withClearing(EcologyClearing newClearing) {
+        return new Ecology(this, obstacles, java.util.Objects.requireNonNull(newClearing, "clearing"));
+    }
+
+    /** What keeps ground open of its plants ({@link EcologyClearing#NONE} unless {@link #withClearing}). */
+    public EcologyClearing clearing() {
+        return clearing;
     }
 
     /** What its plants keep off ({@link Obstacles#NONE} unless {@link #avoiding}). */
@@ -596,6 +616,8 @@ public final class Ecology {
                     for (int s : members) {
                         cover += grid.sample(grid.abundance[s], weights, corner[0]);
                     }
+                    // ground kept open (a road, a plot): fewer candidates, none where it is cleared
+                    cover *= Math.clamp(clearing.keep(px, pz, layer), 0, 1);
                     double accept = unit(hash, 3);
                     if (accept >= cover * lp.fill()) {
                         continue;

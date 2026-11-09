@@ -14,7 +14,7 @@ public enum PropKind {
     BARREL,
     /** A crate by a house. */
     CRATE,
-    /** A woodpile stacked along a wall. */
+    /** A woodpile stacked along a wall (a farmstead's woodshed is a building of its own). */
     WOODPILE,
     /** A water trough at a farmstead. */
     TROUGH,

@@ -40,6 +40,10 @@ project(":common-procedural-water").projectDir = file("water")
 include("common-procedural-settlement")
 project(":common-procedural-settlement").projectDir = file("settlement")
 
+// A settlement's roads in effects-terrain's surface (its terrain modifier hook): optional, as the ecology's adapter is.
+include("common-procedural-settlement-terrain")
+project(":common-procedural-settlement-terrain").projectDir = file("settlement-terrain")
+
 // Procedural assets through the scene's asset system: recipe files imported into meshes and models, cached.
 include("common-procedural-assets")
 project(":common-procedural-assets").projectDir = file("assets")

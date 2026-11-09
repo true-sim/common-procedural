@@ -139,7 +139,9 @@ final class TerrainAnalysis {
     }
 
     private float[][] block(long bx, long bz) {
-        long key = bx * 0x9E3779B1L ^ bz;
+        // both coordinates in full: a hashed key let blocks share it ((1, -1) and (-1, 1) did), and the block analysed
+        // first answered for both, so results depended on the order points were asked for (and on threads)
+        long key = bx << 32 ^ (bz & 0xffffffffL);
         FutureTask<float[][]> task;
         boolean mine = false;
         synchronized (blocks) {

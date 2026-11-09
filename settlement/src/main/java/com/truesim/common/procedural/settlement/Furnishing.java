@@ -1,6 +1,10 @@
 package com.truesim.common.procedural.settlement;
 
+import com.truesim.common.math.geometry.Polygons;
+import com.truesim.common.math.curve.Polyline2;
+
 import com.truesim.common.math.Maths;
+import com.truesim.common.procedural.building.BuildingKind;
 import com.truesim.common.procedural.settlement.Settlement.Building;
 import com.truesim.common.procedural.settlement.Settlement.Fence;
 import com.truesim.common.procedural.settlement.Settlement.FenceKind;
@@ -25,7 +29,7 @@ final class Furnishing {
     private final Field field;
     private final Grading grading;
     private final List<Road> roads;
-    private final List<Line> lines;
+    private final List<Polyline2> lines;
     private final Square square;
     private final List<Plot> plots;
     private final List<Building> buildings;
@@ -33,7 +37,7 @@ final class Furnishing {
     private final List<Lamp> lamps = new ArrayList<>();
     private final List<Fence> fences = new ArrayList<>();
 
-    Furnishing(SettlementParameters p, Field field, Grading grading, List<Road> roads, List<Line> lines, Square square,
+    Furnishing(SettlementParameters p, Field field, Grading grading, List<Road> roads, List<Polyline2> lines, Square square,
         int innSide, List<Plot> plots, List<Building> buildings, List<Integer> barnPaths, long seed) {
         this.p = p;
         this.field = field;
@@ -93,12 +97,12 @@ final class Furnishing {
             if (r.kind() != RoadKind.MAIN && r.kind() != RoadKind.LANE) {
                 continue;
             }
-            Line line = lines.get(r.id());
+            Polyline2 line = lines.get(r.id());
             double off = r.width() / 2 + p.furniture().lampOffset();
             int side = r.id() % 2 == 0 ? 1 : -1;
             for (double s = p.furniture().lampSpacing() / 2; s < line.length(); s += p.furniture().lampSpacing()) {
                 line.at(s, a);
-                if (Geometry.length(a[0] - square.x(), a[1] - square.z()) > reach) {
+                if (Polygons.length(a[0] - square.x(), a[1] - square.z()) > reach) {
                     continue;
                 }
                 double x = a[0] + side * a[3] * off;
@@ -127,7 +131,7 @@ final class Furnishing {
             return false;
         }
         for (Plot plot : plots) {
-            if (Geometry.depth(x, z, plot.x(), plot.z()) > -margin) {
+            if (Polygons.convexDepth(x, z, plot.x(), plot.z()) > -margin) {
                 return false;
             }
         }
@@ -174,11 +178,11 @@ final class Furnishing {
     private void houseProps(SplittableRandom random) {
         for (Building b : buildings) {
             BuildingKind kind = b.spec().kind();
-            if (kind != BuildingKind.HOUSE && kind != BuildingKind.FARMHOUSE) {
+            if (kind != BuildingKind.CHALET && kind != BuildingKind.FARMHOUSE) {
                 continue;
             }
-            double hw = b.spec().width() / 2;
-            double hd = b.spec().depth() / 2;
+            double hw = b.spec().footprint().width() / 2;
+            double hd = b.spec().footprint().depth() / 2;
             int wall = random.nextBoolean() ? 1 : -1;
             boolean barrel = random.nextBoolean();
             houseProp(b, PropKind.BENCH, hw * 0.45, hd + 0.5, 0);
@@ -213,7 +217,7 @@ final class Furnishing {
                 || r.from() >= 0 && roads.get(r.from()).kind() == RoadKind.FOOTPATH) {
                 continue;
             }
-            Line line = lines.get(r.id());
+            Polyline2 line = lines.get(r.id());
             line.at(Math.min(4, line.length() / 2), a);
             double off = r.width() / 2 + 0.7;
             double x = a[0] + a[3] * off;
@@ -235,7 +239,7 @@ final class Furnishing {
             double pick = random.nextDouble();
             int node = field.node(x, z);
             if (node < 0 || !field.contains(x, z, 8) || field.water[node] > 0.05 || field.slope[node] > 35
-                || field.slope[node] < 3 || Geometry.length(x - square.x(), z - square.z())
+                || field.slope[node] < 3 || Polygons.length(x - square.x(), z - square.z())
                 < p.core().coreRadius() * 0.8 || onAnyRoad(x, z, 3) || !free(x, z, 3)) {
                 continue;
             }
@@ -265,7 +269,7 @@ final class Furnishing {
             for (int k : order) {
                 double dx = cx - px[k];
                 double dz = cz - pz[k];
-                double l = Geometry.length(dx, dz);
+                double l = Polygons.length(dx, dz);
                 double x = px[k] + dx / l * 0.4;
                 double z = pz[k] + dz / l * 0.4;
                 run.add(new double[] {x, z});
@@ -282,7 +286,7 @@ final class Furnishing {
             if (r.kind() != RoadKind.TRACK && !main) {
                 continue;
             }
-            Line line = lines.get(r.id());
+            Polyline2 line = lines.get(r.id());
             double off = r.width() / 2 + p.furniture().fenceOffset();
             for (int side : new int[] {1, -1}) {
                 List<double[]> run = new ArrayList<>();
@@ -290,7 +294,7 @@ final class Furnishing {
                     line.at(s, a);
                     double x = a[0] + side * a[3] * off;
                     double z = a[1] - side * a[2] * off;
-                    boolean village = Geometry.length(a[0] - square.x(), a[1] - square.z())
+                    boolean village = Polygons.length(a[0] - square.x(), a[1] - square.z())
                         < p.core().villageRadius();
                     if (!(main && village) && pasture(r, x, z)) {
                         run.add(new double[] {x, z});
@@ -333,7 +337,7 @@ final class Furnishing {
         kept.add(run.getFirst());
         double since = 0;
         for (int k = 1; k < run.size(); k++) {
-            since += Geometry.length(run.get(k)[0] - run.get(k - 1)[0], run.get(k)[1] - run.get(k - 1)[1]);
+            since += Polygons.length(run.get(k)[0] - run.get(k - 1)[0], run.get(k)[1] - run.get(k - 1)[1]);
             if (since >= 4 || k == run.size() - 1) {
                 kept.add(run.get(k));
                 since = 0;

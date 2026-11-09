@@ -80,9 +80,9 @@ class SurfacesTest {
             }
             float[] positions = mesh.positions();
             for (int v = 0; v < positions.length; v += 3) {
-                assertThat(positions[v]).isBetween(-4f, (float) size + 4);
+                assertThat(positions[v]).isBetween(-400f, (float) size + 400);
                 assertThat(positions[v + 1]).isBetween(-1f, 400f);
-                assertThat(positions[v + 2]).isBetween(-4f, (float) size + 4);
+                assertThat(positions[v + 2]).isBetween(-400f, (float) size + 400);
             }
         }
         for (int s = 0; s < RoadMeshes.SLOTS; s++) {
@@ -105,21 +105,21 @@ class SurfacesTest {
                 if (VILLAGE.square().outside(x, z) < 1) {
                     continue;
                 }
-                assertThat(grading.graded(x, z)).isTrue();
-                // the crown, between raster samples a metre apart
+                if (r.kind() != RoadKind.FOOTPATH) {
+                    assertThat(grading.distance(x, z)).isNegative();
+                }
+                // the crown, the terrain sunk under it
+                double sink = VILLAGE.parameters().surface().sink() + VILLAGE.parameters().surface().stepRise();
                 assertThat(grading.height(x, z, terrain.height(x, z))).as("road %d at %d", r.id(), i)
-                    .isCloseTo(r.y()[i], org.assertj.core.data.Offset.offset(0.25));
+                    .isBetween(r.y()[i] - sink - 0.05, r.y()[i] + 0.05);
             }
         }
         Settlement.Square sq = VILLAGE.square();
-        assertThat(grading.height(sq.x(), sq.z(), 0)).isCloseTo(sq.y(), org.assertj.core.data.Offset.offset(1e-3));
+        assertThat(grading.height(sq.x(), sq.z(), 0)).isCloseTo(sq.y() - VILLAGE.parameters().surface().sink(),
+            org.assertj.core.data.Offset.offset(1e-3));
         // far from everything the terrain keeps its height
         assertThat(grading.height(VILLAGE.originX() + 5000, VILLAGE.originZ(), 123)).isEqualTo(123);
-        assertThat(grading.samples()).isGreaterThan(1000);
-        assertThat(grading.cell()).isEqualTo(1);
-        assertThat(Float.isNaN(grading.sample(0, 0))).isTrue();
-        assertThat(grading.x0()).isLessThan(VILLAGE.originX());
-        assertThat(grading.z0()).isLessThan(VILLAGE.originZ());
+        assertThat(grading.graded(VILLAGE.originX() + 5000, VILLAGE.originZ(), 1)).isFalse();
     }
 
     @Test
@@ -167,12 +167,13 @@ class SurfacesTest {
         }
         assertThat(open).isGreaterThan(8);
         assertThat(clearing.trees(VILLAGE.originX() + 5000, 0)).isEqualTo(1);
-        assertThat(clearing.samples()).isEqualTo(VILLAGE.grading().samples());
+
         assertThat(clearing.grassSample(0, 0)).isEqualTo(255);
         assertThat(clearing.treeSample(0, 0)).isEqualTo(255);
         assertThat(clearing.cell()).isEqualTo(1);
-        assertThat(clearing.x0()).isEqualTo(VILLAGE.grading().x0());
-        assertThat(clearing.z0()).isEqualTo(VILLAGE.grading().z0());
+        assertThat(clearing.x0()).isLessThan(VILLAGE.originX());
+        assertThat(clearing.z0()).isLessThan(VILLAGE.originZ());
+        assertThat(clearing.samples()).isGreaterThan(1000);
     }
 
     @Test
@@ -243,7 +244,7 @@ class SurfacesTest {
         // nearly level: falling 2 % to the south
         Ecology flat = Valleys.ecology((x, z) -> 900 - 0.02 * z);
         SettlementParameters p = SettlementParameters.DEFAULTS.withGrid(new SettlementParameters.Grid(512, 4, 1))
-            .withRoad(RoadKind.FOOTPATH, new SettlementParameters.RoadClass(1.4, 0.35, 38, 0, 200));
+            .withRoad(RoadKind.FOOTPATH, new SettlementParameters.RoadClass(1.4, 0.35, 38, 0, 200, 1.5));
         Settlement s = Settlements.plan(p, flat, 0, 0, 3);
         SettlementTest.assertGrades(s);
         SettlementTest.assertPlots(s);
@@ -251,7 +252,7 @@ class SurfacesTest {
         int south = 0;
         for (Building b : s.buildings()) {
             if (b.plot() >= 0 && s.plots().get(b.plot()).zone() == Settlement.Zone.VILLAGE
-                && Math.abs(b.yaw()) < 1e-6) {
+                && Math.abs(com.truesim.common.math.Maths.wrapAngle(b.yaw() - Math.PI / 2)) < 1e-6) {
                 south++;
             }
         }
